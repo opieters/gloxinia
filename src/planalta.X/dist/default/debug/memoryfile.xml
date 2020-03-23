@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project>
+  <executable name="dist/default/debug/planalta.X.debug.elf">
+    <memory name="data">
+      <units>bytes</units>
+      <length>53248</length>
+      <used>30758</used>
+      <free>22490</free>
+    </memory>
+    <memory name="program">
+      <units>bytes</units>
+      <length>524544</length>
+      <used>49122</used>
+      <free>475422</free>
+    </memory>
+  </executable>
+</project>
