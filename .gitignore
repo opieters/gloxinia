@@ -1,0 +1,7 @@
+*.o
+*.o.d
+*.elf
+src/dicio.X/dist/default/production/
+src/planalta.X/dist/default/production/
+src/sylvatica.X/dist/default/production/
+*.mk
