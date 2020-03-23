@@ -1,0 +1,13 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP AudioJack3_TS
+F ~
+$ENDCMP
+#
+$CMP Jumper_4_Open
+D Jumper, 2-pole, open
+K Jumper SPST
+F ~
+$ENDCMP
+#
+#End Doc Library
