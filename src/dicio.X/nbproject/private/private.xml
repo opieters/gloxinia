@@ -21,30 +21,8 @@
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
             <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/dicio.c</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/actuator_growth_chamber.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/actuators.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensor_sylvatica.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/actuator_growth_chamber.c</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/lib/pga.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/actuators.c</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensor_sylvatica.c</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/lib/i2c.c</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensor_apds9306_065.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/main.c</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/lib/i2c.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/dicio.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensor_bh1721fvc.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/planalta.X/planalta.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/lib/can.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/lib/actuator_common.c</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensor_apds9301.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/lib/actuator_common.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensor_planalta.c</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensors.c</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/lib/sensor_common.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensors.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensor_planalta.h</file>
-            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/actuator_pump.c</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensor_ds18b20.h</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/dicio.X/sensor_ds18b20.c</file>
         </group>
     </open-files>
 </project-private>

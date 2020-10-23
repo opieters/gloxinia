@@ -101,7 +101,7 @@ typedef struct sensor_sht35_config_s {
  * corresponding to the sensor number is high, initialisation was successful.
  * Otherwise an error occurred.
  */
-i2c_error_t sht35_init(sensor_sht35_config_t* config);
+i2c_error_t sht35_init_sensor(sensor_sht35_config_t* config);
 
 /**
  * Configure sensor 

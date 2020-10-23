@@ -2,6 +2,24 @@
 <project-private xmlns="http://www.netbeans.org/ns/project-private/1">
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
-        <group/>
+        <group>
+            <file>file:/home/opieters/PhD/gloxinia/src/lib/fir_compressed.s</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/planalta.X/planalta_filtering_5khz.c</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/lib/i2c_slave.c</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/planalta.X/planalta_filtering_25khz.c</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/planalta.X/planalta_freq_sweep.c</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/lib/i2c_controllers.c</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/lib/i2c.c</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/planalta.X/planalta_filtering_10khz.c</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/lib/fir_common.h</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/lib/i2c.h</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/planalta.X/filters_planalta.h</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/planalta.X/planalta_filtering_50khz.c</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/planalta.X/planalta_filtering.h</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/lib/planalta_freq_sweep.h</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/lib/one_wire.c</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/lib/one_wire.h</file>
+            <file>file:/home/opieters/PhD/gloxinia/src/planalta.X/planalta_filtering.c</file>
+        </group>
     </open-files>
 </project-private>

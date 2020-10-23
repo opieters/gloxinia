@@ -152,17 +152,34 @@ fractional output_block0_buffers_b[SYLVATICA_N_CHANNELS][SYLVATICA_BLOCK1_INPUT_
 fractional output_block1_buffers_b[SYLVATICA_N_CHANNELS][SYLVATICA_BLOCK2_INPUT_SIZE];
 fractional output_block2_buffers_b[SYLVATICA_N_CHANNELS][SYLVATICA_BLOCK3_INPUT_SIZE];
 
-volatile bool output_buffer_full = 0, raw_output_buffer_full = 0;
 fractional output_buffer_a[SYLVATICA_N_CHANNELS];
-fractional output_buffer_b[SYLVATICA_N_CHANNELS];
 
 fractional raw_output_buffer_a[SYLVATICA_N_CHANNELS];
-fractional raw_output_buffer_b[SYLVATICA_N_CHANNELS];
 
 i2c_message_t i2c_mr_message;
 uint8_t i2c_mr_message_data[SYLVATICA_I2C_READ_BUFFER_LENGTH];
 
 volatile sylvatica_reg_t i2c_write_reg = SYLVATICA_REG_STATUS;
+
+i2c_message_t i2c_channel_message[SYLVATICA_N_CHANNELS];
+i2c_message_t i2c_raw_channel_message[SYLVATICA_N_CHANNELS];
+uint8_t i2c_channel_data[SYLVATICA_N_CHANNELS][SYLVATICA_I2C_READ_CH_BUFFER_LENGTH];
+uint8_t i2c_raw_channel_data[SYLVATICA_N_CHANNELS][SYLVATICA_I2C_READ_CH_BUFFER_LENGTH];
+
+sylvatica_status_t sylvatica_status = SYLVATICA_STATUS_INIT;
+
+void sylvatica_init_i2c_message_buffers(void){
+    uint16_t i;
+    
+    for(i = 0; i < SYLVATICA_N_CHANNELS; i++){
+        i2c_channel_message[i].data = i2c_channel_data[i];
+        i2c_raw_channel_message[i].data = i2c_raw_channel_data[i];
+        
+        i2c_channel_data[i][0] = 2;
+        i2c_raw_channel_data[i][0] = 2;
+    }
+    
+}
 
 uint8_t i2c_get_address_sylvatica(sylvatica_config_t* config){
     uint16_t address = 0x00, i;
@@ -177,7 +194,6 @@ uint8_t i2c_get_address_sylvatica(sylvatica_config_t* config){
     if(!i2c_check_address(address)){
         address = SYLVATICA_I2C_BASE_ADDRESS;
     }   
-    //address = SYLVATICA_I2C_BASE_ADDRESS;
     
     return address;
 }
@@ -303,7 +319,7 @@ void init_sylvatica(void){
     uint16_t i;
     
     // error function
-    set_error_loop_fn(i2c_detect_stop);
+    set_error_loop_fn(i2c1_detect_stop);
    
     init_pins_sylvatica();
 #ifdef ENABLE_DEBUG
@@ -318,6 +334,8 @@ void init_sylvatica(void){
     sprintf(print_buffer, "Initialised I2C slave address to 0x%x.", gconfig.i2c_config.i2c_address);
     uart_print(print_buffer, strlen(print_buffer));
 #endif
+    
+    sylvatica_init_i2c_message_buffers();
     
     i2c1_init(&gconfig.i2c_config);
 #ifdef ENABLE_DEBUG
@@ -383,12 +401,14 @@ void init_sylvatica(void){
     }
 #endif
     
-#ifdef ENABLE_DEBUG
+    sylvatica_status = SYLVATICA_STATUS_READY;
+    
+/*#ifdef ENABLE_DEBUG
     sprintf(print_buffer, "Starting ADC.");
     uart_print(print_buffer, strlen(print_buffer));
     
     adc_start(&gconfig.adc_config);
-#endif
+#endif*/
     
 #ifdef ENABLE_DEBUG
     //sprintf(print_buffer, "Initialising calibration timer.");
@@ -417,26 +437,34 @@ void loop_sylvatica(void){
     while(1){
         
         while(gconfig.adc_config.status != ADC_STATUS_ON){
-            i2c_detect_stop();
+            i2c1_detect_stop();
         }      
 
+        sylvatica_status = SYLVATICA_STATUS_RUNNING;
+        
         while(gconfig.adc_config.status == ADC_STATUS_ON){
 
-            i2c_detect_stop();
+            i2c1_detect_stop();
 
             if(start_filter_block0){
                 process_filter_block0(); 
             }
+            
+            i2c1_detect_stop();
 
             if(start_filter_block1){
                 process_filter_block1();
                 continue;
             }
+            
+            i2c1_detect_stop();
 
             if(start_filter_block2){
                 process_filter_block2();
                 continue;
             }
+            
+            i2c1_detect_stop();
 
             if(start_filter_block3){
                 process_filter_block3();
@@ -501,10 +529,16 @@ void process_filter_block0(void){
         
         
         if(sample_counter == 10000){
-            if(!raw_output_buffer_full){
-                raw_output_buffer_b[i] = raw_output_buffer_a[i];
-            }
-            raw_output_buffer_a[i] = sample_buffer[0];
+            _SI2C1IE = 0;
+            i2c_raw_channel_data[i][1] = (uint8_t) ((sample_buffer[0] >> 8) & 0xff);
+            i2c_raw_channel_data[i][2] = (uint8_t) (sample_buffer[0] & 0xff);
+            
+            i2c_init_read_message(
+                &i2c_raw_channel_message[i],
+                i2c_raw_channel_data[i],
+                SYLVATICA_I2C_READ_CH_BUFFER_LENGTH);
+            
+            _SI2C1IE = 1;
         }
             
         fir_compressed(SYLVATICA_BLOCK0_OUTPUT_SIZE, 
@@ -516,7 +550,6 @@ void process_filter_block0(void){
     
     if(sample_counter == 10000){
         sample_counter = 0;
-        raw_output_buffer_full = true;
     }
     
     block_counter += SYLVATICA_BLOCK0_OUTPUT_SIZE;
@@ -614,13 +647,18 @@ void process_filter_block3(void){
     
     start_filter_block3 = 0;
     
-    if(!output_buffer_full){
-        for(i = 0; i < SYLVATICA_N_CHANNELS; i++){
-            output_buffer_b[i] = output_buffer_a[i];
-        }
-        output_buffer_full = true;
-        CLEAR_PORT_BIT(gconfig.int_pin);
+    _SI2C1IE = 0;
+    for(i = 0; i < SYLVATICA_N_CHANNELS; i++){
+        i2c_channel_data[i][1] = (uint8_t) ((output_buffer_a[i] >> 8) & 0xff);
+        i2c_channel_data[i][2] = (uint8_t) (output_buffer_a[i] & 0xff);
+
+        i2c_init_read_message(
+            &i2c_channel_message[i],
+            i2c_channel_data[i],
+            SYLVATICA_I2C_READ_CH_BUFFER_LENGTH);
     }
+    CLEAR_PORT_BIT(gconfig.int_pin);
+    _SI2C1IE = 1;
     
     for(i = 0; i < SYLVATICA_N_CHANNELS; i++){   
         fir_compressed(SYLVATICA_BLOCK3_OUTPUT_SIZE, 
@@ -723,61 +761,53 @@ void sylvatica_i2c_read_config(const sylvatica_reg_t reg){
             &i2c_mr_message,
             i2c_mr_message_data,
             1+1);
+    } else if(reg == SYLVATICA_REG_STATUS) {
+        
+        i2c_mr_message_data[0] = 1;
+        i2c_mr_message_data[1] = 0;
+        i2c_mr_message_data[1] |= sylvatica_status;
+        
+        i2c_init_read_message(
+            &i2c_mr_message,
+            i2c_mr_message_data,
+            1+1);
+        
     } else {
         return;
     }
     
     i2c_set_read_message(&i2c_mr_message);
 
-    output_buffer_full = false;
     SET_PORT_BIT(gconfig.int_pin);
 }
 
 void sylvatica_i2c_read_copy_channel_data(const uint8_t channel_n){  
-    if((!output_buffer_full) || (channel_n > 7) || (channel_n < 0)){
+    if((channel_n > 7) || (channel_n < 0)){
         i2c_init_read_message(
             &i2c_mr_message,
             i2c_mr_message_data,
             0);
+        
+        i2c_set_read_message(&i2c_mr_message);
+    } else {
+        i2c_set_read_message(&i2c_channel_message[channel_n]);
     }    
-    
-    i2c_mr_message_data[0] = 2;
-    
-    i2c_mr_message_data[1] = (output_buffer_b[channel_n] >> 8) & 0xff;
-    i2c_mr_message_data[2] = output_buffer_b[channel_n] & 0xff;
-    
-    i2c_init_read_message(
-        &i2c_mr_message,
-        i2c_mr_message_data,
-        2+1);
-    
-    i2c_set_read_message(&i2c_mr_message);
 
-    output_buffer_full = false;
     SET_PORT_BIT(gconfig.int_pin);
 }
 
 void sylvatica_i2c_read_copy_raw_data(const uint8_t channel_n){
-    if((!raw_output_buffer_full) || (channel_n > 7) || (channel_n < 0)){
+    if((channel_n > 7) || (channel_n < 0)){
         i2c_init_read_message(
             &i2c_mr_message,
             i2c_mr_message_data,
             0);
-    }    
+        
+        i2c_set_read_message(&i2c_mr_message);
+    } else {
+        i2c_set_read_message(&i2c_raw_channel_message[channel_n]);
+    }
     
-    i2c_mr_message_data[0] = 2;
-    
-    i2c_mr_message_data[1] = (raw_output_buffer_b[channel_n] >> 8) & 0xff;
-    i2c_mr_message_data[2] = raw_output_buffer_b[channel_n] & 0xff;
-    
-    i2c_init_read_message(
-        &i2c_mr_message,
-        i2c_mr_message_data,
-        2+1);
-    
-    i2c_set_read_message(&i2c_mr_message);
-    
-    raw_output_buffer_full = false;
     SET_PORT_BIT(gconfig.int_pin);
 }
 
@@ -832,7 +862,6 @@ void sylvatica_clear_buffers(void){
     }
     for(i = 0; i < ARRAY_LENGTH(output_buffer_a); i++){
         output_buffer_a[i] = 0;
-        output_buffer_b[i] = 0;
     }
     for(i = 0; i < ARRAY_LENGTH(copy_buffers_a); i++){
         for(j = 0; j < ARRAY_LENGTH(copy_buffers_a[0]); j++){

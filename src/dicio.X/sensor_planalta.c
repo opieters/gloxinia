@@ -18,6 +18,8 @@ void planalta_sensor_meas_read_cb(i2c_message_t* m){
 i2c_error_t planalta_sensor_init(sensor_planalta_config_t* config){
     void (*controller)(i2c_message_t* m);
     uint16_t i;
+    uint8_t read_data[2], write_data[1];
+    i2c_message_t m_write, m_read;
     
     sensor_init_common_config(&config->general, 0);
 
@@ -35,26 +37,98 @@ i2c_error_t planalta_sensor_init(sensor_planalta_config_t* config){
     }
     
     config->m_status_config_data[0] = PLANALTA_REG_STATUS;
+    config->m_status_config_data[1] = PLANALTA_STATUS_RESET;
+    
+    do {
+        i2c_init_message(&config->m_status_config, I2C_WRITE_ADDRESS(config->general.address), config->m_status_config_data, 2,
+            controller, 3, i2c_dummy_callback, NULL, NULL, 0, config->general.i2c_bus,
+            NULL);
+
+        i2c_queue_message(&config->m_status_config);
+        i2c_empty_queue();
+
+        delay_ms(100);
+    } while(config->m_status_config.error != I2C_NO_ERROR);
+    
+    delay_ms(100);
+    
+    // wait until status of system reports everything is OK
+    switch(config->general.i2c_bus) {
+        case I2C1_BUS:
+            controller = i2c1_write_read_controller;
+            break;
+        case I2C2_BUS:
+            controller = i2c2_write_read_controller;
+            break;
+        default:
+            report_error("planalta: I2C module not supported.");
+            break;
+    }
+    
+    do {
+        i2c_init_message(&m_write, 
+            I2C_WRITE_ADDRESS(config->general.address), 
+            write_data, ARRAY_LENGTH(write_data), controller, 3, i2c_dummy_callback, 
+            NULL, NULL, 0, config->general.i2c_bus, &m_read);
+        
+        write_data[0] = PLANALTA_REG_STATUS;
+        
+        i2c_init_connected_message(&m_read, &m_write, read_data, ARRAY_LENGTH(read_data));
+        
+        i2c_queue_message(&m_write);
+        i2c_empty_queue();
+        
+        uart_simple_print("Waiting for READY from planalta.");
+        
+        if(m_write.error != I2C_NO_ERROR){
+            uart_simple_print("ERROR :(");
+        }
+        
+        delay_ms(100);
+    } while(read_data[1] != PLANALTA_STATUS_READY);
+    
+    uart_simple_print("Received READY from planalta.");
+    
+    delay_ms(1000);
+    
+    switch(config->general.i2c_bus) {
+        case I2C1_BUS:
+            controller = i2c1_write_controller;
+            break;
+        case I2C2_BUS:
+            controller = i2c2_write_controller;
+            break;
+        default:
+            report_error("planalta: I2C module not supported.");
+            break;
+    }
+    
+    // buffer init
+    config->m_status_config_data[0] = PLANALTA_REG_STATUS;
     config->m_status_config_data[1] = PLANALTA_STATUS_ON | PLANALTA_STATUS_RESET_BUFFER;
     
     i2c_init_message(&config->m_status_config, I2C_WRITE_ADDRESS(config->general.address), config->m_status_config_data, 2,
-        controller, 3, i2c_dummy_callback, NULL, 0, config->general.i2c_bus,
+        controller, 3, i2c_dummy_callback, NULL, NULL, 0, config->general.i2c_bus,
         NULL);
     
     i2c_queue_message(&config->m_status_config);
     i2c_empty_queue();
+    
+    delay_ms(1000);
     
     // I2C messages
     for(i = 0; i < PLANALTA_N_ADC_CHANNELS; i++){  
         planalta_sensor_init_channel(&config->channels[i], config);
     }
     
+    delay_ms(100);
+    
     // turn on ADC
     config->m_adc_config_data[0] = PLANALTA_REG_ADC;
     config->m_adc_config_data[1] = PLANALTA_ADC_ON;
 
     i2c_init_message(&config->m_adc_config, I2C_WRITE_ADDRESS(config->general.address), config->m_adc_config_data, 2,
-        controller, 3, i2c_dummy_callback, NULL, 0, config->general.i2c_bus,
+        controller, 3, i2c_dummy_callback, NULL, NULL, 0, config->general.i2c_bus,
         NULL);
     
     if(config->m_status_config.error != I2C_NO_ERROR){ 
@@ -62,6 +136,8 @@ i2c_error_t planalta_sensor_init(sensor_planalta_config_t* config){
     } else {
         config->general.status = SENSOR_STATUS_ACTIVE;
     }
+    
+    config->sample_time = 0;
     
     return config->m_status_config.error;
 }
@@ -86,13 +162,11 @@ void planalta_sensor_init_channel(sensor_planalta_channel_config_t* config,
             break;
     }
     
-    // TODO: use struct elements here
-    // TODO: call calibration function in planalta and tx result to logger
     config->m_ch_config_data[0] = PLANALTA_REG_CONFIG_CH0 + config->local_id;
     config->m_ch_config_data[1] = PLANALTA_CH_CONFIG_ON | PLANALTA_CH_CONFIG_SET_GAIN(PGA_GAIN_1);
 
     i2c_init_message(&config->m_ch_config, I2C_WRITE_ADDRESS(sensor_config->general.address), config->m_ch_config_data, 2,
-        controller, 3, i2c_dummy_callback, (uint8_t*) config, 0, sensor_config->general.i2c_bus,
+        controller, 3, i2c_dummy_callback, NULL, (uint8_t*) config, 0, sensor_config->general.i2c_bus,
         NULL);
 
     i2c_queue_message(&config->m_ch_config);
@@ -126,6 +200,7 @@ void planalta_sensor_init_channel(sensor_planalta_channel_config_t* config,
         controller, 
         1, 
         planalta_sensor_meas_read_cb, 
+            NULL,
         (uint8_t*) config, 
         0,  
         sensor_config->general.i2c_bus, 
@@ -159,10 +234,17 @@ void planalta_sensor_read(sensor_planalta_config_t* config){
     
     for(i = 0; i < PLANALTA_N_ADC_CHANNELS; i++){
         if(config->channels[i].status == SENSOR_STATUS_ACTIVE){
-            i2c_reset_message(&config->channels[i].m_read, 1);
-            config->channels[i].m_read.data_length = PLANALTA_I2C_READ_BUFFER_LENGTH;
-            i2c_reset_message(&config->channels[i].m_write, 1);
-            i2c_queue_message(&config->channels[i].m_write);
+            if(i2c_check_message_sent(&config->channels[i].m_read) 
+                    && i2c_check_message_sent(&config->channels[i].m_write)){
+                i2c_reset_message(&config->channels[i].m_read, 1);
+                config->channels[i].m_read.data_length = PLANALTA_I2C_READ_BUFFER_LENGTH;
+                i2c_reset_message(&config->channels[i].m_write, 1);
+                i2c_queue_message(&config->channels[i].m_write);
+            } else {
+                sprintf(print_buffer, "Planalta %x channel %x not fully processed.", config->general.global_id, i);
+                uart_print(print_buffer, strlen(print_buffer));
+                config->general.elog.n_errors++;
+            }
         }
     }
 }
@@ -235,10 +317,15 @@ void planalta_sensor_i2c1_write_read_controller(i2c_message_t* m){
                 I2C1CONbits.PEN = 1;  
             } else {
                 I2C1CONbits.RCEN = 1;
-                i2c_transfer_status = 7;      
+                i2c_transfer_status = 8;  
             }
             break;
         case 7:
+            transfer_done = 0;
+            I2C1CONbits.RCEN = 1;
+            i2c_transfer_status = 8;   
+            break;
+        case 8:
             // receive data byte
             transfer_done = 0;
             
@@ -253,21 +340,21 @@ void planalta_sensor_i2c1_write_read_controller(i2c_message_t* m){
             // normal message handling
             if(n_transfers == m->connected_message->data_length){
                 I2C1CONbits.ACKDT = 1; // send NACK
-                i2c_transfer_status = 8;  
+                i2c_transfer_status = 9;  
             } else {
                 I2C1CONbits.ACKDT = 0; // send ACK
-                i2c_transfer_status = 6;
+                i2c_transfer_status = 7;
             }
             I2C1CONbits.ACKEN = 1; // start ACK event
             
             break;
-        case 8:
+        case 9:
             // send stop event
             transfer_done = 0;
-            i2c_transfer_status = 9;
+            i2c_transfer_status = 10;
             I2C1CONbits.PEN = 1;
             break;
-        case 9:
+        case 10:
             m->status = I2C_MESSAGE_PROCESSING;
             i2c_transfer_status = 0;
             break;

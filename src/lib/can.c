@@ -596,6 +596,7 @@ inline void can_process_gateway_message(){
         
         m = &uart_can_messages[uart_can_message_idx];
         parse_can_to_uart_message(&can_message, m);
+        uart_reset_message(m);
         uart_queue_message(m);
         uart_can_message_idx = (uart_can_message_idx + 1) % UART_MESSAGE_BUFFER_LENGTH; 
         

@@ -10,14 +10,16 @@
 #include "sensor_sht35.h"
 #include "sensor_sylvatica.h"
 
-#define N_SENSOR_APDS9301      1
+#define N_SENSOR_APDS9301      0
 #define N_SENSOR_SHT35         1
 #define N_SENSOR_BH1721FVC     0
 #define N_SENSOR_OPT3001Q1     0
-#define N_SENSOR_APDS9306      0
+#define N_SENSOR_APDS9306      1
 #define N_SYLVATICA_SENSORS    2
 #define N_PLANALTA_SENSORS     1
 #define N_SENSOR_LICOR         1
+
+#define SENSOR_ERROR_TH        1
 
 typedef enum {
     sensor_type_sht35,
@@ -56,7 +58,6 @@ void sensors_init(void);
 void sensors_start(void);
 
 void sensor_callback(void);
-void sensor_slave_callback(void);
 void sensor_status_report(void);
 void send_sensor_status(sensor_general_config_t* config);
 
@@ -79,6 +80,9 @@ void sensor_licor_all_low(void);
 void sensor_licor_all_high(void);
 
 void sensors_data_init(void);
+
+void sensors_error_check(void);
+void sensors_error_recover(void);
 
 #ifdef	__cplusplus
 }

@@ -30,14 +30,13 @@
 #define PLANALTA_DEC_FACT_F6 10
 #define PLANALTA_DEC_FACT_F7 4
 #define PLANALTA_DEC_FACT_F8 2
-#define PLANALTA_DEC_FACT_F9 5
+#define PLANALTA_DEC_FACT_F9 8
 
 #ifdef	__cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
 extern FIRStruct filters_0[PLANALTA_5KHZ_N_ADC_CHANNELS];
-extern FIRStruct filter_9;
 extern FIRStruct filters_1_q[PLANALTA_5KHZ_N_ADC_CHANNELS];
 extern FIRStruct filters_1_i[PLANALTA_5KHZ_N_ADC_CHANNELS];
 extern FIRStruct filters_2_q[PLANALTA_5KHZ_N_ADC_CHANNELS];
@@ -54,6 +53,8 @@ extern FIRStruct filters_7_q[PLANALTA_10KHZ_N_ADC_CHANNELS];
 extern FIRStruct filters_7_i[PLANALTA_10KHZ_N_ADC_CHANNELS];
 extern FIRStruct filters_8_q[PLANALTA_5KHZ_N_ADC_CHANNELS];
 extern FIRStruct filters_8_i[PLANALTA_5KHZ_N_ADC_CHANNELS];
+extern FIRStruct filter_9_i;
+extern FIRStruct filter_9_q;
 
 void init_filters(void);
 

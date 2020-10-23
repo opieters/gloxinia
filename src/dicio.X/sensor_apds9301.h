@@ -21,7 +21,6 @@
  * Number of sensors of this sensor type. Other sensors are assumed to be 
  * present only once.
  */
-#define N_SENSOR_APDS9301   1
 
 #define SENSOR_APDS3901_DATA_LENGTH 2
 #define SENSOR_APDS3901_CAN_DATA_LENGTH (SENSOR_APDS3901_DATA_LENGTH*2)

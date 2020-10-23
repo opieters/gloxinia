@@ -1,11 +1,3 @@
-/*
- * File:   i2c.c
- * Author: opieters
- *
- * Created on June 28, 2018, 6:04 PM
- */
-
-
 #include <xc.h>
 #include <i2c.h>
 #include <stddef.h>
@@ -14,12 +6,6 @@
 #include <device_configuration.h>
 #include <utilities.h>
 #include <p33EP512MC806.h>
-
-typedef enum {
-    I2C_CALLBACK_NONE,
-    I2C_CALLBACK_M_READ_S_WRITE,
-    I2C_CALLBACK_M_WRITE_S_READ,
-}i2c_callback_status_t;
 
 i2c_mstatus_t (*i2c_transciever_controller)(void);
 i2c_mstatus_t (*i2c_transciever_reset)(void);
@@ -42,203 +28,31 @@ volatile uint16_t n_i2c_queued_messages = 0;
 
 volatile uint8_t i2c_transfer_status = 0;
 
+pin_t i2c1_scl_pin, i2c2_scl_pin;
+pin_t i2c1_sda_pin, i2c2_sda_pin;
 
-static pin_t i2c1_scl_pin, i2c2_scl_pin;
-static pin_t i2c1_sda_pin, i2c2_sda_pin;
-i2c_slave_state_t i2c1_state = I2C_SLAVE_STATE_IDLE, i2c2_state = I2C_SLAVE_STATE_IDLE;
+i2c_message_t* i2c_slave_mr_sw_message;
 
-void (*i2c_slave_mw_sr_callback) (i2c_message_t*) = i2c_dummy_slave_mw_sr_callback;
-void (*i2c_slave_mr_sw_callback) (i2c_message_t*) = i2c_dummy_slave_mr_sw_callback;
-volatile i2c_callback_status_t callback_status = I2C_CALLBACK_NONE;
-
-static i2c_message_t* i2c_slave_mr_sw_message;
-static i2c_message_t i2c_slave_mw_sr_message;
-static uint8_t i2c_slave_mw_sr_data[I2C_W_MESSAGE_BUFFER_LENGTH];
 uint8_t n_slave_write_transfers = 0;
 
 volatile uint8_t i2c_slave_continue = 0;
 
 volatile uint8_t stop_detected = 0, start_detected = 0;
 
+volatile i2c_slave_state_t i2c1_slave_state = I2C_SLAVE_STATE_IDLE;
+volatile i2c_slave_state_t i2c_slave2_state = I2C_SLAVE_STATE_IDLE;
+
+
 uint16_t n_i2c1_errors, n_i2c2_errors;
 
-void i2c_dummy_slave_mw_sr_callback(i2c_message_t* m){
-    
-}
-void i2c_dummy_slave_mr_sw_callback (i2c_message_t* m){
-    
-}
+i2c_message_t* m = NULL;
 
-void i2c_run_slave(void){
-    if(callback_status != I2C_CALLBACK_NONE){
-        switch(callback_status){
-            case I2C_CALLBACK_M_READ_S_WRITE:
-                if(i2c_slave_mr_sw_callback != NULL){
-                    i2c_slave_mr_sw_callback(i2c_slave_mr_sw_message);
-                }
-                break;
-            case I2C_CALLBACK_M_WRITE_S_READ:
-                if(i2c_slave_mw_sr_callback != NULL){
-                    i2c_slave_mw_sr_callback(&i2c_slave_mw_sr_message);
-                }
-                break;
-            default:
-                break;
+extern void (*i2c_slave_mw_sr_callback) (i2c_message_t*);
+extern void (*i2c_slave_mr_sw_callback) (i2c_message_t*);
+extern volatile i2c_callback_status_t callback_status;
 
-        }
-    }
-    if(I2C2STATbits.P == 1){
-        stop_detected = 1;
-        _SI2C1IF = 1;
-    }
-    
-    if(i2c_slave_continue == 1){
-        i2c_process_slave_auto();
-        i2c_slave_continue = 0;
-    }
-}
-
-i2c_slave2_state_t i2c_state2 = I2C_SLAVE_STATE2_IDLE;
-
-void i2c_detect_stop(void){
-    if((i2c_state2 != I2C_SLAVE_STATE2_IDLE) && (I2C1STATbits.P == 1)){
-        _SI2C1IF = 1;
-    }
-}
-
-volatile uint8_t i2c_interrupt_triggered = 0;
-
-void run_i2c_slave2(void){
-    uint8_t dummy_read;
-    static uint8_t n_transfers = 0;
-   
-    
-    // determine state
-    switch(i2c_state2){
-        case I2C_SLAVE_STATE2_IDLE:
-            if((I2C1STATbits.D_A == 0) && (I2C1STATbits.S == 1)){
-                i2c_state2 = I2C_SLAVE_STATE2_ADDRESS;
-            }
-            n_transfers = 0;
-            break;
-        case I2C_SLAVE_STATE2_WRITE:
-            if((I2C1STATbits.D_A == 0) && (I2C1STATbits.S == 1) && (I2C1STATbits.RBF == 1)){
-                i2c_slave_mr_sw_callback(i2c_slave_mr_sw_message);
-                i2c_state2 = I2C_SLAVE_STATE2_REPEAT_START;
-                break;
-            }
-            if (I2C1STATbits.P == 1){
-                i2c_slave_mr_sw_callback(i2c_slave_mr_sw_message);
-                i2c_state2 = I2C_SLAVE_STATE2_STOP;
-            }
-            break;
-        case I2C_SLAVE_STATE2_READ:
-            if((I2C1STATbits.D_A == 0) && (I2C1STATbits.S == 1) && (I2C1STATbits.RBF == 1)){
-                i2c_slave_mw_sr_callback(&i2c_slave_mw_sr_message);
-                i2c_state2 = I2C_SLAVE_STATE2_REPEAT_START;
-                break;
-            }
-            if (I2C1STATbits.P == 1){
-                i2c_slave_mw_sr_callback(&i2c_slave_mw_sr_message);
-                i2c_state2 = I2C_SLAVE_STATE2_STOP;
-            }
-            break;
-        case I2C_SLAVE_STATE2_NO_MESSAGE:
-            if (I2C1STATbits.P == 1){
-                i2c_state2 = I2C_SLAVE_STATE2_STOP;
-            }
-            break;
-        default:
-            break;
-            
-    }
-    // execute state
-    switch(i2c_state2){
-        case I2C_SLAVE_STATE2_ADDRESS:
-            // read address to clear buffer
-            i2c_slave_mw_sr_message.address = I2C1RCV;
-            break;
-        case I2C_SLAVE_STATE2_REPEAT_START:            
-            n_transfers = 0;
-            
-            // read address to clear buffer
-            i2c_slave_mw_sr_message.address = I2C1RCV;
-            break;
-        case I2C_SLAVE_STATE2_WRITE:
-            if(n_transfers < i2c_slave_mr_sw_message->data_length){
-                I2C1TRN = i2c_slave_mr_sw_message->data[n_transfers];
-                n_transfers++;
-            } else {
-                I2C1TRN = 0;
-            }
-            break;
-        case I2C_SLAVE_STATE2_READ:
-            if(n_transfers < I2C_W_MESSAGE_BUFFER_LENGTH){
-                i2c_slave_mw_sr_message.data[n_transfers] = I2C1RCV;
-                n_transfers++;
-                i2c_slave_mw_sr_message.data_length = n_transfers;
-                //I2C1CONbits.ACKDT = 1;
-            } else {
-                i2c_slave_mw_sr_message.error = I2C_BUFFER_FULL;
-                
-                dummy_read = I2C1RCV;
-            }
-            break;
-        case I2C_SLAVE_STATE2_STOP:
-            // clear stop bit
-            I2C1STATbits.P = 0;
-            
-            // clear overflow
-            // read last received byte
-            if(I2C1STATbits.RBF == 1){
-                dummy_read = I2C1RCV;
-            }
-            // clear overflow condition
-            if(I2C1STATbits.I2COV == 1){
-                I2C1STATbits.I2COV = 0;
-            }
-            
-            // clear overflow condition
-            if(I2C1STATbits.IWCOL == 1){
-                I2C1STATbits.IWCOL = 0;
-            }
-            
-            break;
-        default:
-            break;
-    }
-    
-    // update state (if needed)
-    switch(i2c_state2){
-        case I2C_SLAVE_STATE2_REPEAT_START:
-        case I2C_SLAVE_STATE2_ADDRESS:
-            if(I2C1STATbits.R_W == 1){
-                if(i2c_slave_mr_sw_message != NULL){
-                    i2c_state2 = I2C_SLAVE_STATE2_WRITE;
-                    
-                    if(n_transfers < i2c_slave_mr_sw_message->data_length){
-                        I2C1TRN = i2c_slave_mr_sw_message->data[n_transfers];
-                        n_transfers++;
-                    } else {
-                        I2C1TRN = 0;
-                    }
-                }
-                else {
-                    i2c_state2 = I2C_SLAVE_STATE2_NO_MESSAGE;
-                }
-            } else {
-                i2c_state2 = I2C_SLAVE_STATE2_READ;
-            }
-            break;
-        case I2C_SLAVE_STATE2_STOP:
-            i2c_state2 = I2C_SLAVE_STATE2_IDLE;
-            break;
-        default:
-            break;
-    }
-    
-    I2C1CONbits.SCLREL = 1;
-}
+extern i2c_message_t i2c_slave_mw_sr_message;
+extern uint8_t i2c_slave_mw_sr_data[I2C_W_MESSAGE_BUFFER_LENGTH];
 
 void i2c_add_reset_callback(i2c_bus_t i2c_bus, void (*reset)(void), bool (*init)(void)){
     static size_t n_i2c_callbacks = 0;
@@ -395,73 +209,6 @@ inline void i2c_queue_message(i2c_message_t* message){
     }
 }
 
-void i2c1_read_controller(i2c_message_t* m){
-    static uint8_t n_transfers = 0;
-   
-    switch(i2c_transfer_status){
-        case 0:
-            i2c_transfer_status = 1;
-            n_transfers = 0;
-        case 1:
-            // i2c start condition
-            transfer_done = 0;
-            I2C1CONbits.SEN = 1;
-            i2c_transfer_status = 2;
-            break;
-        case 2:
-            // send start byte with address for reading
-            transfer_done = 0;
-            I2C1TRN = m->address;
-            i2c_transfer_status = 3;
-            break;
-        case 3:
-            // enable receive mode
-            transfer_done = 0;
-            if(I2C1STATbits.ACKSTAT == 1) {
-                m->error = I2C_NO_ACK;
-                i2c_transfer_status = 6;
-                I2C1CONbits.PEN = 1;
-            } else {
-                I2C1CONbits.RCEN = 1;
-                i2c_transfer_status = 4;
-            }
-            break;
-        case 4:
-            // receive data byte
-            transfer_done = 0;
-            
-            m->data[n_transfers] = I2C1RCV;
-            n_transfers++;
-            
-            if(n_transfers == m->data_length){
-                I2C1CONbits.ACKDT = 1; // send NACK
-                i2c_transfer_status = 5;  
-            } else {
-                I2C1CONbits.ACKDT = 0; // send ACK
-                i2c_transfer_status = 3;
-            }
-            I2C1CONbits.ACKEN = 1; // start ACK event
-            
-            break;
-        case 5:
-            // send stop event
-            transfer_done = 0;
-            i2c_transfer_status = 6;
-            I2C1CONbits.PEN = 1;
-            break;
-        case 6:
-            i2c_transfer_status = 0;
-            m->status = I2C_MESSAGE_PROCESSING;
-            break;
-        default:
-            // go back to initial state
-            transfer_done = 0;
-            i2c_transfer_status = 0;
-            m->status = I2C_MESSAGE_PROCESSING;
-            I2C1CONbits.PEN = 1;
-            break;
-    }
-}
 
 uint16_t reset_i2c1_bus(void){
     uint16_t n_reads = 0, data = 0, i;
@@ -536,7 +283,7 @@ uint8_t reset_i2c2_bus(void){
         data = I2C2TRN;
         n_reads++;
         
-        I2C1CONbits.PEN = 1;
+        I2C2CONbits.PEN = 1;
         delay_us(100);
         
         I2C2CONbits.I2CEN = 0;
@@ -608,470 +355,31 @@ void disable_i2c2_bus(){
 }
 
 void __attribute__ ( (__interrupt__, no_auto_psv) ) _T2Interrupt( void ){
-    i2c_message_t* m;
+    //i2c_message_t* m; 
     
-#ifdef ENABLE_DEBUG
-    sprintf(print_buffer, "Bus reset pins.");
-    uart_print(print_buffer, strlen(print_buffer));
-#endif 
-    
-    m = i2c_message_queue[i2c_queue_idx];
-    
-    // cancel message
-    switch(m->i2c_bus){
-        case I2C1_BUS:
-            I2C1CONbits.PEN = 1;
-            n_i2c1_errors++;
-            break;
-        case I2C2_BUS:
-            I2C2CONbits.PEN = 1;
-            n_i2c2_errors++;
-            break;
-        default:
-            report_error("I2C: I2C module not supported.");
-            break;
+    // release I2C bus
+    if(m->i2c_bus == I2C1_BUS){
+        I2C1CONbits.SCLREL = 1;
+        I2C1CONbits.PEN = 1;
+    } else {
+        I2C2CONbits.SCLREL = 1;
+        I2C2CONbits.PEN = 1;
     }
+    
+    i2c1_slave_state = I2C_SLAVE_STATE_IDLE;
+    transfer_done = 1;
+    
     m->status = I2C_MESSAGE_CANCELED;
+    m->n_attempts = 0;
+    
+    // disable timer
+    T2CONbits.TON = 0;
     
     _T2IF = 0;
 }
 
-void i2c1_write_read_controller(i2c_message_t* m){
-    static uint16_t n_transfers = 0;
-   
-    switch(i2c_transfer_status){
-        case 0:
-            i2c_transfer_status = 1;
-            n_transfers = 0;
-        case 1:
-            // i2c start condition
-            transfer_done = 0;
-            I2C1CONbits.SEN = 1;
-            i2c_transfer_status = 2;
-            break;
-        case 2:
-            // send start byte with address for reading
-            transfer_done = 0;
-            I2C1TRN = m->address;
-            i2c_transfer_status = 3;
-            break;
-        case 3:
-            // transfer data byte
-            transfer_done = 0;
-            if(I2C1STATbits.ACKSTAT == 1) {
-                m->error = I2C_NO_ACK;
-                i2c_transfer_status = 9;
-                I2C1CONbits.PEN = 1;
-            } else {
-                I2C1TRN = m->data[n_transfers];
-                n_transfers++;
-                
-                if(n_transfers == m->data_length){
-                    i2c_transfer_status = 4;
-                } else {
-                    i2c_transfer_status = 3;
-                }
-            }
-            break;
-        case 4:
-            // check final ACK and send repeated start event
-            transfer_done = 0;
-            if(I2C1STATbits.ACKSTAT == 1) {
-                m->error = I2C_NO_ACK;
-                i2c_transfer_status = 9;
-                I2C1CONbits.PEN = 1;           
-            } else {
-                I2C1CONbits.RSEN = 1;
-                i2c_transfer_status = 5;
-            }
-            break;
-        case 5:
-            // send start byte with address for reading
-            transfer_done = 0;
-            I2C1TRN = m->connected_message->address;
-            i2c_transfer_status = 6;
-            n_transfers = 0;
-            break;
-        case 6:
-            // enable receive mode
-            transfer_done = 0;
-            if(I2C1STATbits.ACKSTAT == 1) {
-                m->error = I2C_NO_ACK;
-                i2c_transfer_status = 9;
-                I2C1CONbits.PEN = 1;  
-            } else {
-                I2C1CONbits.RCEN = 1;
-                i2c_transfer_status = 7;      
-            }
-            break;
-        case 7:
-            // receive data byte
-            transfer_done = 0;
-            
-            m->connected_message->data[n_transfers] = I2C1RCV;
-            n_transfers++;
-            
-            if(n_transfers == m->connected_message->data_length){
-                I2C1CONbits.ACKDT = 1; // send NACK
-                i2c_transfer_status = 8;  
-            } else {
-                I2C1CONbits.ACKDT = 0; // send ACK
-                i2c_transfer_status = 6;
-            }
-            I2C1CONbits.ACKEN = 1; // start ACK event
-            
-            break;
-        case 8:
-            // send stop event
-            transfer_done = 0;
-            i2c_transfer_status = 9;
-            I2C1CONbits.PEN = 1;
-            break;
-        case 9:
-            m->status = I2C_MESSAGE_PROCESSING;
-            i2c_transfer_status = 0;
-            break;
-        default:
-            // go back to initial state
-            transfer_done = 0;
-            i2c_transfer_status = 0;
-            m->status = m->status = I2C_MESSAGE_PROCESSING;
-            I2C1CONbits.PEN = 1;
-            break;
-    }
-}
-
-void i2c2_write_read_controller(i2c_message_t* m){
-    static uint16_t n_transfers = 0;
-   
-    switch(i2c_transfer_status){
-        case 0:
-            i2c_transfer_status = 1;
-            n_transfers = 0;
-        case 1:
-            // i2c start condition
-            transfer_done = 0;
-            I2C2CONbits.SEN = 1;
-            i2c_transfer_status = 2;
-            break;
-        case 2:
-            // send start byte with address for reading
-            transfer_done = 0;
-            I2C2TRN = m->address;
-            i2c_transfer_status = 3;
-            break;
-        case 3:
-            // transfer data byte
-            transfer_done = 0;
-            if(I2C2STATbits.ACKSTAT == 1) {
-                m->error = I2C_NO_ACK;
-                i2c_transfer_status = 9;
-                I2C2CONbits.PEN = 1;
-            } else {
-                I2C2TRN = m->data[n_transfers];
-                n_transfers++;
-                
-                if(n_transfers == m->data_length){
-                    i2c_transfer_status = 4;
-                } else {
-                    i2c_transfer_status = 3;
-                }
-            }
-            break;
-        case 4:
-            // check final ACK and send repeated start event
-            transfer_done = 0;
-            if(I2C2STATbits.ACKSTAT == 1) {
-                m->error = I2C_NO_ACK;
-                i2c_transfer_status = 9;
-                I2C2CONbits.PEN = 1;           
-            } else {
-                I2C2CONbits.RSEN = 1;
-                i2c_transfer_status = 5;
-            }
-            break;
-        case 5:
-            // send start byte with address for reading
-            transfer_done = 0;
-            I2C2TRN = m->connected_message->address;
-            i2c_transfer_status = 6;
-            n_transfers = 0;
-            break;
-        case 6:
-            // enable receive mode
-            transfer_done = 0;
-            if(I2C2STATbits.ACKSTAT == 1) {
-                m->error = I2C_NO_ACK;
-                i2c_transfer_status = 9;
-                I2C2CONbits.PEN = 1;  
-            } else {
-                I2C2CONbits.RCEN = 1;
-                i2c_transfer_status = 7;      
-            }
-            break;
-        case 7:
-            // receive data byte
-            transfer_done = 0;
-            
-            m->connected_message->data[n_transfers] = I2C2RCV;
-            n_transfers++;
-            
-            if(n_transfers == m->connected_message->data_length){
-                I2C2CONbits.ACKDT = 1; // send NACK
-                i2c_transfer_status = 8;  
-            } else {
-                I2C2CONbits.ACKDT = 0; // send ACK
-                i2c_transfer_status = 6;
-            }
-            I2C2CONbits.ACKEN = 1; // start ACK event
-            
-            break;
-        case 8:
-            // send stop event
-            transfer_done = 0;
-            i2c_transfer_status = 9;
-            I2C2CONbits.PEN = 1;
-            break;
-        case 9:
-            m->status = I2C_MESSAGE_PROCESSING;
-            i2c_transfer_status = 0;
-            break;
-        default:
-            // go back to initial state
-            transfer_done = 0;
-            i2c_transfer_status = 0;
-            m->status = m->status = I2C_MESSAGE_PROCESSING;
-            I2C2CONbits.PEN = 1;
-            break;
-    }
-};
-
-void i2c2_read_controller(i2c_message_t* m){
-    static uint16_t n_transfers = 0;
-   
-    switch(i2c_transfer_status){
-        case 0:
-            i2c_transfer_status = 1;
-            n_transfers = 0;
-        case 1:
-            // i2c start condition
-            transfer_done = 0;
-            I2C2CONbits.SEN = 1;
-            i2c_transfer_status = 2;
-            break;
-        case 2:
-            // send start byte with address for reading
-            transfer_done = 0;
-            I2C2TRN = m->address;
-            i2c_transfer_status = 3;
-            break;
-        case 3:
-            // enable receive mode
-            transfer_done = 0;
-            if(I2C2STATbits.ACKSTAT == 1) {
-                m->error = I2C_NO_ACK;
-                i2c_transfer_status = 6;
-                I2C2CONbits.PEN = 1;
-            } else {
-                I2C2CONbits.RCEN = 1;
-                i2c_transfer_status = 4;    
-            }
-            break;
-        case 4:
-            // receive data byte
-            transfer_done = 0;
-            
-            m->data[n_transfers] = I2C2RCV;
-            n_transfers++;
-            
-            if(n_transfers == m->data_length){
-                I2C2CONbits.ACKDT = 1; // send NACK
-                i2c_transfer_status = 5;  
-            } else {
-                I2C2CONbits.ACKDT = 0; // send ACK
-                i2c_transfer_status = 3;
-            }
-            
-            I2C2CONbits.ACKEN = 1; // start ACK event        
-            
-            break;
-        case 5:
-            // send stop event
-            transfer_done = 0;
-            i2c_transfer_status = 6;
-            I2C2CONbits.PEN = 1;
-            break;
-        case 6:
-            i2c_transfer_status = 0;
-            m->status = I2C_MESSAGE_PROCESSING;
-            break;
-        default:
-            // go back to initial state
-            transfer_done = 0;
-            i2c_transfer_status = 0;
-            m->status = I2C_MESSAGE_PROCESSING;
-            I2C2CONbits.PEN = 1;
-            break;
-    }
-}
-
-void i2c1_write_controller(i2c_message_t* m){
-    static uint16_t n_transfers = 0;
-   
-    switch(i2c_transfer_status){
-        case 0:
-            n_transfers = 0;
-            i2c_transfer_status = 1;
-            break;
-        case 1:
-            // i2c start condition
-            transfer_done = 0;
-            I2C1CONbits.SEN = 1;
-            i2c_transfer_status = 2;
-            break;
-        case 2:
-            // send start byte with address for writing
-            transfer_done = 0;
-            I2C1TRN = m->address;
-            i2c_transfer_status = 3;
-            break;
-        case 3:
-            // transfer data byte
-            transfer_done = 0;
-            if(I2C1STATbits.ACKSTAT == 1) {
-                m->error = I2C_NO_ACK;
-                i2c_transfer_status = 0;
-                I2C1CONbits.PEN = 1;
-                m->status = I2C_MESSAGE_PROCESSING;
-            } else {
-                I2C1TRN = m->data[n_transfers];
-                n_transfers++;
-                
-                if(n_transfers == m->data_length){
-                    i2c_transfer_status = 4;
-                } else {
-                    i2c_transfer_status = 3;
-                }
-            }
-
-            break;
-        case 4:
-            // send stop event
-            transfer_done = 0;
-            I2C1CONbits.PEN = 1;
-            i2c_transfer_status = 5;
-            break;
-        case 5:
-            i2c_transfer_status = 0;
-            m->status = I2C_MESSAGE_PROCESSING;
-            break;
-        default:
-            // go back to initial state
-            transfer_done = 0;
-            I2C1CONbits.PEN = 1;
-            i2c_transfer_status = 0;
-            m->status = I2C_MESSAGE_PROCESSING;
-            break;
-    }
-}
-
-void i2c2_write_controller(i2c_message_t* m){
-    static uint16_t n_transfers = 0;
-   
-    switch(i2c_transfer_status){
-        case 0:
-            n_transfers = 0;
-            i2c_transfer_status = 1;
-            break;
-        case 1:
-            // i2c start condition
-            transfer_done = 0;
-            I2C2CONbits.SEN = 1;
-            i2c_transfer_status = 2;
-            break;
-        case 2:
-            // send start byte with address for writing
-            transfer_done = 0;
-            I2C2TRN = m->address;
-            i2c_transfer_status = 3;
-            break;
-        case 3:
-            // transfer data byte
-            transfer_done = 0;
-            if(I2C2STATbits.ACKSTAT == 1) {
-                m->error = I2C_NO_ACK;
-                i2c_transfer_status = 0;
-                I2C2CONbits.PEN = 1;
-                m->status = I2C_MESSAGE_PROCESSING;
-            } else {
-                I2C2TRN = m->data[n_transfers];
-                n_transfers++;
-                
-                if(n_transfers == m->data_length ){
-                    i2c_transfer_status = 4;
-                } else {
-                    i2c_transfer_status = 3;
-                }
-            }
-
-            break;
-        case 4:
-            // send stop event
-            transfer_done = 0;
-            I2C2CONbits.PEN = 1;
-            i2c_transfer_status = 5;
-            break;
-        case 5:
-            i2c_transfer_status = 0;
-            m->status = I2C_MESSAGE_PROCESSING;
-            break;
-        default:
-            // go back to initial state
-            transfer_done = 0;
-            I2C2CONbits.PEN = 1;
-            i2c_transfer_status = 0;
-            m->status = I2C_MESSAGE_PROCESSING;
-            break;
-    }
-}
-
-void i2c_blocking_read_controller(i2c_message_t* m){
-    switch(m->i2c_bus) {
-        case I2C1_BUS:
-            while(m->status != I2C_MESSAGE_HANDLED){
-                i2c1_read_controller(m);
-            }
-            break;
-        case I2C2_BUS:
-            while(m->status != I2C_MESSAGE_HANDLED){
-                i2c2_read_controller(m);
-            }
-            break;
-        default:
-            break;
-    }
-}
-
-void i2c_blocking_write_controller(i2c_message_t* m){
-    switch(m->i2c_bus) {
-        case I2C1_BUS:
-            while(m->status != I2C_MESSAGE_HANDLED){
-                i2c1_write_controller(m);
-            }
-            break;
-        case I2C2_BUS:
-            while(m->status != I2C_MESSAGE_HANDLED){
-                i2c2_write_controller(m);
-            }
-            break;
-        default:
-            break;
-    }
-}
 
 void i2c_process_queue(void){
-    static i2c_message_t* m = NULL;
-    
     if(transfer_done == 1){
         if(m != NULL){
             switch(m->status){
@@ -1129,6 +437,23 @@ void i2c_process_queue(void){
 #endif
                     m->controller(m);
                     break;
+                case I2C_MESSAGE_CANCELED:
+                    if(m->i2c_bus == I2C1_BUS){
+                        I2C1CONbits.PEN = 1;
+                    } else {
+                        I2C2CONbits.PEN = 1;
+                    }
+                    
+                    if(m->cancelled_callback != NULL){
+                        m->cancelled_callback(m);
+                    }
+
+                    // move to next message
+                    i2c_queue_idx = (i2c_queue_idx + 1) % I2C_MESSAGE_BUFFER_LENGTH;
+                    m = NULL;
+                    n_i2c_queued_messages--;
+
+                    break;
                 default:
                     T2CONbits.TON = 0; // disable timer (everything OK!)
                         
@@ -1150,6 +475,25 @@ void i2c_process_queue(void){
     }
 }
 
+void i2c1_init(i2c_config_t* config){
+    switch(config->status){
+        case I2C_STATUS_SLAVE_OFF:
+        case I2C_STATUS_SLAVE_ON:
+            i2c1_init_slave(config);
+            config->status = I2C_STATUS_SLAVE_ON;
+            break;
+        case I2C_STATUS_MASTER_OFF:
+        case I2C_STATUS_MASTER_ON:
+            i2c1_init_master(config);
+            config->status = I2C_STATUS_MASTER_ON;
+            break;
+        default:
+            break;
+    }
+    
+    n_i2c1_errors = 0;
+    
+}
 
 void i2c1_init_slave(i2c_config_t* config){
     _SI2C1IF = 0;
@@ -1184,10 +528,22 @@ void i2c1_init_slave(i2c_config_t* config){
     
     // configure internal data variables
     i2c_slave_mr_sw_message = NULL;
-    i2c_init_message(&i2c_slave_mw_sr_message, 0, i2c_slave_mw_sr_data, 0, NULL, 0, NULL, NULL, 0, I2C1_BUS, NULL);
+    i2c_init_message(&i2c_slave_mw_sr_message, 0, i2c_slave_mw_sr_data, 0, NULL, 0, NULL, NULL, NULL, 0, I2C1_BUS, NULL);
     n_slave_write_transfers = 0;
     
-    //
+    // timer for stop condition
+    i2c1_init_slave_timer();
+    
+    // init timer to release SCL 
+    T2CONbits.TON = 0;
+    T2CONbits.TCS = 0; // use internal instruction cycle as clock source
+    T2CONbits.TGATE = 0; // disable gated timer
+    T2CONbits.TCKPS = 0b11; // prescaler 1:256
+    TMR2 = 0; // clear timer register
+    PR2 = I2C_TIMER_PERIOD - 1; // set period of ADC_SAMPLE_FREQUENCY
+    _T2IF = 0; // clear interrupt flag
+    _T2IE = 1; // enable interrupt
+    
     _SI2C1IP = 1;
     
     // clear interrupt flag
@@ -1195,9 +551,10 @@ void i2c1_init_slave(i2c_config_t* config){
     // enable interrupt
     _SI2C1IE = 1;
     
+    
 }
 
-void init_i2c2_slave(i2c_config_t* config){
+void i2c2_init_slave(i2c_config_t* config){
     _SI2C2IF = 0;
     _SI2C2IE = 0;
     
@@ -1230,8 +587,18 @@ void init_i2c2_slave(i2c_config_t* config){
     
     // configure internal data variables
     i2c_slave_mr_sw_message = NULL;
-    i2c_init_message(&i2c_slave_mw_sr_message, 0, i2c_slave_mw_sr_data, 0, NULL, 0, NULL, NULL, 0, I2C2_BUS, NULL);
+    i2c_init_message(&i2c_slave_mw_sr_message, 0, i2c_slave_mw_sr_data, 0, NULL, 0, NULL, NULL, NULL, 0, I2C2_BUS, NULL);
     n_slave_write_transfers = 0;
+    
+    // init timer to release SCL 
+    T2CONbits.TON = 0;
+    T2CONbits.TCS = 0; // use internal instruction cycle as clock source
+    T2CONbits.TGATE = 0; // disable gated timer
+    T2CONbits.TCKPS = 0b11; // prescaler 1:256
+    TMR2 = 0; // clear timer register
+    PR2 = I2C_TIMER_PERIOD - 1; // set period of ADC_SAMPLE_FREQUENCY
+    _T2IF = 0; // clear interrupt flag
+    _T2IE = 1; // enable interrupt
     
     // clear interrupt flag
     _SI2C2IF = 0;
@@ -1240,36 +607,16 @@ void init_i2c2_slave(i2c_config_t* config){
     
 }
 
-void i2c1_init(i2c_config_t* config){
+void i2c2_init(i2c_config_t* config){
     switch(config->status){
         case I2C_STATUS_SLAVE_OFF:
         case I2C_STATUS_SLAVE_ON:
-            i2c1_init_slave(config);
+            i2c2_init_slave(config);
             config->status = I2C_STATUS_SLAVE_ON;
             break;
         case I2C_STATUS_MASTER_OFF:
         case I2C_STATUS_MASTER_ON:
-            i2c1_init_master(config);
-            config->status = I2C_STATUS_MASTER_ON;
-            break;
-        default:
-            break;
-    }
-    
-    n_i2c1_errors = 0;
-    
-}
-
-void init_i2c2(i2c_config_t* config){
-    switch(config->status){
-        case I2C_STATUS_SLAVE_OFF:
-        case I2C_STATUS_SLAVE_ON:
-            init_i2c2_slave(config);
-            config->status = I2C_STATUS_SLAVE_ON;
-            break;
-        case I2C_STATUS_MASTER_OFF:
-        case I2C_STATUS_MASTER_ON:
-            init_i2c2_master(config);
+            i2c2_init_master(config);
             config->status = I2C_STATUS_MASTER_ON;
             break;
         default:
@@ -1279,7 +626,7 @@ void init_i2c2(i2c_config_t* config){
     n_i2c2_errors = 0;
 }
 
-void init_i2c2_master(i2c_config_t* config) {
+void i2c2_init_master(i2c_config_t* config) {
     uint16_t frequency;
     
     i2c_reset_callback_init();
@@ -1320,7 +667,7 @@ void init_i2c2_master(i2c_config_t* config) {
     _T2IF = 0; // clear interrupt flag
     _T2IE = 1; // enable interrupt
     
-    T3CONbits.TON = 0;
+    /*T3CONbits.TON = 0;
     T3CONbits.TCS = 0; // use internal instruction cycle as clock source
     T3CONbits.TGATE = 0; // disable gated timer
     T3CONbits.TCKPS = 0b11; // prescaler 1:256
@@ -1329,191 +676,13 @@ void init_i2c2_master(i2c_config_t* config) {
     _T3IF = 0; // clear interrupt flag
     _T3IE = 1; // enable interrupt
     
-    T3CONbits.TON = 1;
-}
-
-void i2c_process_slave_auto(void){
-    uint8_t dummy_read;
-
-    // check for repeated start
-    if((i2c1_state != I2C_SLAVE_STATE_IDLE) && (I2C1STATbits.S == 1) && (I2C1STATbits.D_A == 0)){
-        
-        I2C1STATbits.S = 0;
-        
-        n_slave_write_transfers = 0;
-        
-        switch(i2c1_state){
-            case I2C_SLAVE_STATE_M_READ_S_WRITE:
-                i2c_slave_mr_sw_callback(i2c_slave_mr_sw_message);
-                if(I2C1STATbits.R_W == 0){
-                    i2c1_state = I2C_SLAVE_STATE_M_WRITE_S_READ;
-                    
-                    i2c_slave_mw_sr_message.address = I2C1RCV;
-                    i2c_slave_mw_sr_message.error = I2C_NO_ERROR;
-                    i2c_slave_mw_sr_message.data_length = 0;
-                } else {
-                    i2c1_state = I2C_SLAVE_STATE_WAIT_FOR_STOP;
-                }
-                
-                
-                break;
-            case I2C_SLAVE_STATE_M_WRITE_S_READ:
-                // check if overflow occurred
-                if(I2C1STATbits.I2COV == 1){
-                    i2c_slave_mw_sr_message.error = I2C_MISSED_DATA;
-                    I2C1STATbits.I2COV = 0;
-                }
-                i2c_slave_mw_sr_callback(&i2c_slave_mw_sr_message);
-                
-                if(I2C1STATbits.R_W == 1){
-                    i2c1_state = I2C_SLAVE_STATE_M_READ_S_WRITE;
-                    
-                    // read address    
-                    dummy_read = I2C1RCV;
-                    
-                    // transfer first byte
-                    I2C1TRN = i2c_slave_mr_sw_message->data[0];
-                    n_slave_write_transfers++;  
-                } else {
-                    i2c1_state = I2C_SLAVE_STATE_WAIT_FOR_STOP;
-                }
-                break;
-            default:
-                break;
-        }
-    } else {
-        // check if this is a stop condition
-        if((stop_detected == 1) && (i2c1_state != I2C_SLAVE_STATE_WAIT_FOR_STOP) && (i2c1_state != I2C_SLAVE_STATE_IDLE)){
-
-            switch(i2c1_state){
-                case I2C_SLAVE_STATE_M_READ_S_WRITE:
-                    i2c_slave_mr_sw_callback(i2c_slave_mr_sw_message);
-                    break;
-                case I2C_SLAVE_STATE_M_WRITE_S_READ:
-                    i2c_slave_mw_sr_callback(&i2c_slave_mw_sr_message);
-                    break;
-                default:
-                    break;
-            }
-            i2c1_state = I2C_SLAVE_STATE_WAIT_FOR_STOP;
-        }
-
-        // perform actual I/O
-        switch(i2c1_state){
-            case I2C_SLAVE_STATE_IDLE:
-                // only perform action if this is indeed an address
-                if(I2C1STATbits.D_A == 0){
-
-                    n_slave_write_transfers = 0;
-
-                    // check is master wants to read/write
-                    if(I2C1STATbits.R_W == 1){
-                        // update next state only if we have data to transmit
-                        if(i2c_slave_mr_sw_message != NULL){
-                            i2c1_state = I2C_SLAVE_STATE_M_READ_S_WRITE;
-                            i2c_slave_mr_sw_message->status = I2C_MESSAGE_TRANSFERRING;
-
-                            // transfer first byte
-                            I2C1TRN = i2c_slave_mr_sw_message->data[0];
-                            n_slave_write_transfers++;
-
-                            // read address
-                            dummy_read = I2C1RCV;
-                        } else {
-                            i2c1_state = I2C_SLAVE_STATE_WAIT_FOR_STOP;
-                        }
-                    } else {
-                        i2c1_state = I2C_SLAVE_STATE_M_WRITE_S_READ;
-
-                        // configure message
-                        i2c_slave_mw_sr_message.address = I2C1RCV;
-                        i2c_slave_mw_sr_message.error = I2C_NO_ERROR;
-                        i2c_slave_mw_sr_message.data_length = 0;
-                    }
-                }
-                break;
-            case I2C_SLAVE_STATE_M_READ_S_WRITE:
-
-                if(I2C1STATbits.ACKSTAT == 0){
-                    // master expects more data
-                    if(n_slave_write_transfers < i2c_slave_mr_sw_message->data_length){
-                        // send data
-                        I2C1TRN = i2c_slave_mr_sw_message->data[n_slave_write_transfers];
-                        n_slave_write_transfers++;
-
-                    } else {
-                        i2c1_state = I2C_SLAVE_STATE_WAIT_FOR_STOP;
-                    }
-                } else {
-                    // master does not request data
-                    if(n_slave_write_transfers == i2c_slave_mr_sw_message->data_length){
-                        i2c_slave_mr_sw_message->status = I2C_MESSAGE_HANDLED;
-                    } else {
-                        i2c_slave_mr_sw_message->status = I2C_MESSAGE_CANCELED;
-                    }
-                    i2c_slave_mr_sw_callback(i2c_slave_mr_sw_message);
-                    i2c1_state = I2C_SLAVE_STATE_WAIT_FOR_STOP;
-                }
-                break;
-            case I2C_SLAVE_STATE_M_WRITE_S_READ:
-                // fill buffer as long as there is space
-                // indicate overflow if not enough space
-                // send NACK if overflow
-                if(i2c_slave_mw_sr_message.data_length < I2C_W_MESSAGE_BUFFER_LENGTH){
-                    i2c_slave_mw_sr_message.data[i2c_slave_mw_sr_message.data_length] = I2C1RCV;
-                    i2c_slave_mw_sr_message.data_length++;
-                } else {
-                    i2c_slave_mw_sr_message.error = I2C_BUFFER_FULL;
-                }
-
-                break;
-            case I2C_SLAVE_STATE_WAIT_FOR_STOP:
-
-                if(stop_detected == 1){
-                    // read last received byte
-                    if(I2C1STATbits.RBF == 1){
-                        dummy_read = I2C1RCV;
-                    }
-                    // clear overflow condition
-                    if(I2C1STATbits.I2COV == 1){
-                        I2C1STATbits.I2COV = 0;
-                    }
-
-                    // go back to idle state
-                    i2c1_state = I2C_SLAVE_STATE_IDLE;
-
-                    // clear stop bit flag
-                    stop_detected = 0;
-                    I2C2STATbits.P = 0;
-
-                    n_slave_write_transfers = 0;
-                }
-                break;
-            default:
-                break;
-        }
-    }
-    
-    if(I2C1CONbits.SCLREL == 0){
-        // we must wait for at least 1 micro second between writing 
-        // I2C1TRN and setting SCLREL
-        __asm__ volatile ("repeat #63");
-        __asm__ volatile ("nop");
-        I2C1CONbits.SCLREL = 1;
-    }
-}
-
-// TODO: add support for clock stretching
-void __attribute__ ( (interrupt, no_auto_psv) ) _SI2C1Interrupt( void ) {
-    //i2c_interrupt_triggered = 1;
-    run_i2c_slave2();
-
-    _SI2C1IF = 0;               //clear I2C1 Slave interrupt flag
+    T3CONbits.TON = 1;*/
 }
 
 void i2c_init_message(i2c_message_t* m, uint8_t address, uint8_t* data,
     uint16_t data_length, void (*controller)(i2c_message_t* m),
     int8_t n_attempts, void (*callback)(i2c_message_t* m), 
+    void (*cancelled_callback)(i2c_message_t* m),
     uint8_t* processor_data, uint8_t processor_data_length,  i2c_bus_t i2c_bus,
     i2c_message_t* connected_message){
     m->address = address;
@@ -1524,6 +693,7 @@ void i2c_init_message(i2c_message_t* m, uint8_t address, uint8_t* data,
     m->error = I2C_NO_ERROR;
     m->processor_data = processor_data;
     m->callback = callback;
+    m->cancelled_callback = cancelled_callback;
     m->processor_data_length = processor_data_length;
     m->i2c_bus = i2c_bus;
     m->connected_message = connected_message;
@@ -1536,8 +706,8 @@ void i2c_init_read_message(
     uint16_t data_length){
         m->data = data;
         m->data_length = data_length;
-        m->status = I2C_MESSAGE_HANDLED;
         m->error = I2C_NO_ERROR;
+        m->status = I2C_MESSAGE_READ_READY;
 }
 
 
@@ -1549,6 +719,10 @@ void i2c_init_connected_message(i2c_message_t* sm,
     sm->data = data;
     sm->data_length = data_length;
     sm->i2c_bus = mm->i2c_bus;
+}
+
+bool i2c_check_message_sent(i2c_message_t* m){
+    return (m->status == I2C_MESSAGE_HANDLED) || (m->status == I2C_MESSAGE_CANCELED);
 }
 
 void i2c_reset_message(i2c_message_t* m, uint8_t n_attempts){
@@ -1608,6 +782,19 @@ void __attribute__ ( (__interrupt__, no_auto_psv) ) _T3Interrupt( void ){
                 break;
             }
         }
+        
+        I2C1CONbits.I2CEN = 0;
+        // manually generate stop condition
+        _ODCG2 = 0;  // configure I2C pins as open drain output
+        _ODCG3 = 0; // configure I2C pins as open drain outputs
+        _LATG2 = 1;
+        _LATG3 = 0;
+        delay_ms(1);
+        _LATG2 = 1;
+        _LATG3 = 1;
+        delay_ms(1);
+        _ODCG2 = 1;  // configure I2C pins as open drain output
+        _ODCG3 = 1; // configure I2C pins as open drain outputs
         
         // initialise devices
         init_status = true;
@@ -1671,6 +858,20 @@ void __attribute__ ( (__interrupt__, no_auto_psv) ) _T3Interrupt( void ){
                 break;
             }
         }
+        
+        I2C2CONbits.I2CEN = 0;
+        // manually generate stop condition
+        _ODCF4 = 0;
+        _ODCF5 = 0;
+        _LATF5 = 1;
+        _LATF4 = 0;
+        delay_ms(1);
+        _LATF4 = 1;
+        _LATF5 = 1;
+        delay_ms(1);
+        _ODCF4 = 1; // configure I2C pins as open drain output
+        _ODCF5 = 1; // configure I2C pins as open drain output
+        
         
         // initialise devices
         init_status = true;

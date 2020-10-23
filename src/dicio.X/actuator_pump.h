@@ -8,6 +8,8 @@
 
 #define ACTUATOR_PUMP_DATA_LENGTH 1
 
+#define SENSOR_LICOR_GC_PIN_BOARD2 7
+
 typedef enum {
     PUMP_STATUS_OFF,
     PUMP_STATUS_ON,
@@ -31,6 +33,7 @@ typedef struct {
 } pump_config_t;
 
 void init_actuator_pump(pump_config_t* config);
+void actuator_pump_cb(pump_config_t* config);
 
 
 void start_pump(pump_config_t* config); 

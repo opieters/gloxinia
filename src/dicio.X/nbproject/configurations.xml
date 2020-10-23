@@ -11,7 +11,6 @@
       <itemPath>../lib/uart.h</itemPath>
       <itemPath>../lib/utilities.h</itemPath>
       <itemPath>../lib/gpio_expander.h</itemPath>
-      <itemPath>../lib/i2c.h</itemPath>
       <itemPath>sensor_sht35.h</itemPath>
       <itemPath>sensor_apds9301.h</itemPath>
       <itemPath>sensor_bh1721fvc.h</itemPath>
@@ -26,8 +25,11 @@
       <itemPath>sensor_licor.h</itemPath>
       <itemPath>actuator_pump.h</itemPath>
       <itemPath>actuator_growth_chamber.h</itemPath>
-      <itemPath>../lib/dali.h</itemPath>
       <itemPath>sensor_planalta.h</itemPath>
+      <itemPath>actuator_relay_board.h</itemPath>
+      <itemPath>../lib/i2c.h</itemPath>
+      <itemPath>../lib/one_wire.h</itemPath>
+      <itemPath>sensor_ds18b20.h</itemPath>
     </logicalFolder>
     <logicalFolder name="LinkerScript"
                    displayName="Linker Files"
@@ -43,7 +45,6 @@
       <itemPath>../lib/spi.c</itemPath>
       <itemPath>../lib/uart.c</itemPath>
       <itemPath>../lib/utilities.c</itemPath>
-      <itemPath>../lib/i2c.c</itemPath>
       <itemPath>../lib/can.c</itemPath>
       <itemPath>sensor_apds9301.c</itemPath>
       <itemPath>sensor_sht35.c</itemPath>
@@ -59,8 +60,13 @@
       <itemPath>sensor_licor.c</itemPath>
       <itemPath>actuator_pump.c</itemPath>
       <itemPath>actuator_growth_chamber.c</itemPath>
-      <itemPath>../lib/dali.c</itemPath>
       <itemPath>sensor_planalta.c</itemPath>
+      <itemPath>actuator_relay_board.c</itemPath>
+      <itemPath>../lib/i2c.c</itemPath>
+      <itemPath>../lib/one_wire.c</itemPath>
+      <itemPath>../lib/i2c_controllers.c</itemPath>
+      <itemPath>../lib/i2c_slave.c</itemPath>
+      <itemPath>sensor_ds18b20.c</itemPath>
     </logicalFolder>
     <logicalFolder name="ExternalFiles"
                    displayName="Important Files"
@@ -69,7 +75,6 @@
     </logicalFolder>
   </logicalFolder>
   <sourceRootList>
-    <Elem>../src</Elem>
     <Elem>../include</Elem>
     <Elem>../lib</Elem>
     <Elem>../planalta.X</Elem>
@@ -84,12 +89,14 @@
         <targetPluginBoard></targetPluginBoard>
         <platformTool>pk4hybrid</platformTool>
         <languageToolchain>XC16</languageToolchain>
-        <languageToolchainVersion>1.36</languageToolchainVersion>
+        <languageToolchainVersion>1.60</languageToolchainVersion>
         <platform>2</platform>
       </toolsSet>
       <packs>
-        <pack name="dsPIC33E-GM-GP-MC-GU-MU_DFP" vendor="Microchip" version="1.0.23"/>
+        <pack name="dsPIC33E-GM-GP-MC-GU-MU_DFP" vendor="Microchip" version="1.2.58"/>
       </packs>
+      <ScriptingSettings>
+      </ScriptingSettings>
       <compileType>
         <linkerTool>
           <linkerLibItems>
@@ -122,7 +129,7 @@
         <property key="enable-all-warnings" value="true"/>
         <property key="enable-ansi-std" value="false"/>
         <property key="enable-ansi-warnings" value="false"/>
-        <property key="enable-fatal-warnings" value="true"/>
+        <property key="enable-fatal-warnings" value="false"/>
         <property key="enable-large-arrays" value="false"/>
         <property key="enable-omit-frame-pointer" value="false"/>
         <property key="enable-procedural-abstraction" value="false"/>
@@ -235,6 +242,7 @@
         <property key="legacy-libc" value="true"/>
         <property key="mpreserve-all" value="false"/>
         <property key="oXC16glb-macros" value=""/>
+        <property key="omit-pack-options" value="1"/>
         <property key="output-file-format" value="elf"/>
         <property key="preserve-all" value="false"/>
         <property key="preserve-file" value=""/>
@@ -304,6 +312,8 @@
                   value="Press to browse for a specific firmware version"/>
         <property key="ToolFirmwareOption.UpdateOptions"
                   value="ToolFirmwareOption.UseLatest"/>
+        <property key="ToolFirmwareToolPack"
+                  value="Press to select which tool pack to use"/>
         <property key="UART 1" value="true"/>
         <property key="UART 2" value="true"/>
         <property key="UART 3" value="true"/>
@@ -311,6 +321,7 @@
         <property key="communication.activationmode" value="nohv"/>
         <property key="communication.interface"
                   value="${communication.interface.default}"/>
+        <property key="communication.interface.jtag" value="2wire"/>
         <property key="communication.speed" value="${communication.speed.default}"/>
         <property key="debugoptions.useswbreakpoints" value="false"/>
         <property key="memories.aux" value="false"/>
@@ -327,8 +338,6 @@
         <property key="memories.programmemory" value="true"/>
         <property key="memories.programmemory.ranges" value="0-7fffff"/>
         <property key="poweroptions.powerenable" value="false"/>
-        <property key="programmerToGoFilePath"
-                  value="/home/opieters/PhD/gloxinia/src/dicio.X/debug/default/dicio_ptg"/>
         <property key="programmerToGoImageName" value="dicio_ptg"/>
         <property key="programoptions.donoteraseauxmem" value="false"/>
         <property key="programoptions.eraseb4program" value="true"/>
@@ -340,6 +349,8 @@
         <property key="programoptions.pgmentry.voltage" value="low"/>
         <property key="programoptions.pgmspeed" value="Med"/>
         <property key="programoptions.preservedataflash" value="false"/>
+        <property key="programoptions.preservedataflash.ranges"
+                  value="${memories.dataflash.default}"/>
         <property key="programoptions.preserveeeprom" value="false"/>
         <property key="programoptions.preserveeeprom.ranges" value=""/>
         <property key="programoptions.preserveprogram.ranges" value=""/>
@@ -348,7 +359,13 @@
         <property key="programoptions.programcalmem" value="false"/>
         <property key="programoptions.programuserotp" value="false"/>
         <property key="programoptions.testmodeentrymethod" value="VDDFirst"/>
+        <property key="programoptionsedbg.eraseb4program" value="true"/>
+        <property key="ptgProgramImage" value="true"/>
         <property key="ptgSendImage" value="true"/>
+        <property key="toolpack.updateoptions"
+                  value="toolpack.updateoptions.uselatestoolpack"/>
+        <property key="toolpack.updateoptions.packversion"
+                  value="Press to select which tool pack to use"/>
         <property key="voltagevalue" value="3.25"/>
       </pk4hybrid>
     </conf>

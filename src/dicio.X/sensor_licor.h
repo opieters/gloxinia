@@ -11,7 +11,8 @@
  * present only once.
  */
 
-#define SENSOR_LICOR_DATA_LENGTH 1
+#define SENSOR_LICOR_DATA_LENGTH 0
+#define SENSOR_LICOR_GC_PIN_BOARD2 6 
 
 
 #ifdef	__cplusplus

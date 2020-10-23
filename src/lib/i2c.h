@@ -10,7 +10,7 @@
 #define FREQUENCY_SCL 100000
 #define DELAY_I2C     0
 #define MAX_N_I2C_RST_READS 100
-#define I2C_TIMER_PERIOD (0xffff+1)
+#define I2C_TIMER_PERIOD 0xffff
 #define N_I2C_DEVICE_RESET_CALLBACKS 5
 #define I2C_WRITE_ADDRESS(x) ( ((x) << 1) & 0xfe )
 #define I2C_READ_ADDRESS(x) ( ((x) << 1) | 0x01 )
@@ -36,6 +36,8 @@ extern "C" {
         I2C_BUFFER_FULL,
         I2C_MISSED_DATA,
         I2C_ZERO_ATTEMPTS,
+        I2C_TOO_MANY_READS,
+        I2C_MSG_NOT_INITIALISED,
     } i2c_error_t;
     
     
@@ -47,6 +49,7 @@ extern "C" {
         I2C_MESSAGE_TRANSFERRING,
         I2C_MESSAGE_CANCELED,
         I2C_MESSAGE_NO_BUS,
+        I2C_MESSAGE_READ_READY,
         n_i2c_status
     } i2c_mstatus_t;
     
@@ -87,6 +90,7 @@ extern "C" {
         volatile i2c_mstatus_t status;
         volatile i2c_error_t error;
         void (*callback)(i2c_message_t* m);
+        void (*cancelled_callback)(i2c_message_t* m);
         uint8_t* processor_data;
         size_t processor_data_length;
         i2c_bus_t i2c_bus;
@@ -115,35 +119,23 @@ extern "C" {
         const pin_t scl_pin;
         const pin_t sda_pin;
     } i2c_config_t;
-
+    
     typedef enum {
         I2C_SLAVE_STATE_IDLE,
-        I2C_SLAVE_STATE_M_READ_S_WRITE,
-        I2C_SLAVE_STATE_M_WRITE_S_READ, 
-        I2C_SLAVE_STATE_WAIT_FOR_STOP,
+        I2C_SLAVE_STATE_NO_MESSAGE,
+        I2C_SLAVE_STATE_WRITE,
+        I2C_SLAVE_STATE_READ, 
+        I2C_SLAVE_STATE_ADDRESS,
+        I2C_SLAVE_STATE_REPEAT_START,
+        I2C_SLAVE_STATE_STOP,
     } i2c_slave_state_t;
     
     typedef enum {
-        I2C_SLAVE_STATE2_IDLE,
-        I2C_SLAVE_STATE2_NO_MESSAGE,
-        I2C_SLAVE_STATE2_WRITE,
-        I2C_SLAVE_STATE2_READ, 
-        I2C_SLAVE_STATE2_ADDRESS,
-        I2C_SLAVE_STATE2_REPEAT_START,
-        I2C_SLAVE_STATE2_STOP,
-    } i2c_slave2_state_t;
+        I2C_CALLBACK_NONE,
+        I2C_CALLBACK_M_READ_S_WRITE,
+        I2C_CALLBACK_M_WRITE_S_READ,
+    } i2c_callback_status_t;
 
-    void i2c1_init_slave(i2c_config_t* config);
-    void i2c1_init_master(i2c_config_t* config);
-    
-    void i2c_run_slave(void);
-
-    
-    //extern volatile uint8_t transfer_done;
-    //extern volatile uint8_t i2c_transfer;
-    //extern i2c_error_status_t (*i2c_transciever_controller)(void);
-    //extern i2c_error_status_t (*i2c_transciever_reset)(void);
-    
     /**
      * @brief Queue I2C message with default transceiver.
      * 
@@ -236,10 +228,10 @@ extern "C" {
     /**
      * @brief Initialises the I2C2 module.
      */
-    void init_i2c2(i2c_config_t* config);
+    void i2c2_init(i2c_config_t* config);
     
-    void init_i2c2_slave(i2c_config_t* config);
-    void init_i2c2_master(i2c_config_t* config);
+    void i2c2_init_slave(i2c_config_t* config);
+    void i2c2_init_master(i2c_config_t* config);
     
     /**
      * @brief Checks if an I2C error occurred.
@@ -268,6 +260,7 @@ extern "C" {
         void (*controller)(i2c_message_t* m),
         int8_t n_attempts,
         void (*callback)(i2c_message_t* m),
+        void (*cancelled_callback)(i2c_message_t* m),
         uint8_t* processor_data,
         uint8_t processor_data_length,
         i2c_bus_t i2c_bus,
@@ -291,13 +284,16 @@ extern "C" {
     
     void i2c_empty_queue(void);
     
-    void i2c_detect_stop(void);
+    void i2c1_detect_stop(void);
     
-    void i2c_dummy_slave_mw_sr_callback(i2c_message_t*);
-    void i2c_dummy_slave_mr_sw_callback (i2c_message_t*);
+    void i2c_slave_dummy_mw_sr_callback(i2c_message_t*);
+    void i2c_slave_dummy_mr_sw_callback (i2c_message_t*);
     
     bool i2c_check_address(uint8_t address);
     
+    bool i2c_check_message_sent(i2c_message_t* m);
+    
+    void i2c1_init_slave_timer(void);
 
 #ifdef	__cplusplus
 }

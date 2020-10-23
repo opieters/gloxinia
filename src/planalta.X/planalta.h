@@ -14,6 +14,7 @@
 #define PLANALTA_N_CHANNELS 4
 #define PLANALTA_N_ADC_CHANNELS 8
 #define PLANALTA_I2C_BASE_ADDRESS  0b1011000
+#define PLANALTA_I2C_READ_CH_BUFFER_LENGTH 5
 
 #define PLANALTA_ADC_SAMPLE_FREQUENCY     160000
 
@@ -30,6 +31,7 @@
 #define PLANALTA_STATUS_OFF          (1 << 7)
 #define PLANALTA_STATUS_RESET_BUFFER (1 << 6)
 #define PLANALTA_STATUS_RESET        (1 << 5)
+#define PLANALTA_READ_STATE_MASK          (0b11 << 3)
 
 #define PLANALTA_ADC_ON (1<<7)
 
@@ -76,6 +78,12 @@ typedef enum {
     PLANALTA_CHANNEL_DISABLED,
 } planalta_channel_status_t;
 
+typedef enum {
+    PLANALTA_STATUS_INITIALISING,
+    PLANALTA_STATUS_READY,
+    PLANALTA_STATUS_RUNNING
+} planalta_status_t;
+
 typedef struct planalta_config_s {
     adc_config_t adc_config;
     dac_config_t dac_config;
@@ -87,6 +95,7 @@ typedef struct planalta_config_s {
     planalta_signal_frequency_t signal_frequency;
     pin_t filter_selection_pins[2];
     pin_t int_pin;
+    planalta_status_t status;
 } planalta_config_t;
 
 #ifdef	__cplusplus

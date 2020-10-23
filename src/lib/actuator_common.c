@@ -17,6 +17,7 @@ void send_actuator_error(actuator_general_config_t* config, i2c_message_t* m){
         while(config->elog.uart_message.status != UART_MSG_TRANSFERRED);
         config->elog.uart_message.data[2] = m->status;
         config->elog.uart_message.data[3] = m->error;
+        uart_reset_message(&config->elog.uart_message);
         uart_queue_message(&config->elog.uart_message);
     } else {
         config->elog.can_message.data[2] = m->status;
@@ -36,6 +37,7 @@ void send_actuator_data(actuator_general_config_t* config, uint8_t* data, uint8_
         }
         m->length = length;
         
+        uart_reset_message(m);
         uart_queue_message(m);
     } else {
         can_message_t* m = &config->dlog.can_message;
@@ -53,7 +55,8 @@ void send_actuator_data(actuator_general_config_t* config, uint8_t* data, uint8_
 }
 
 void send_actuator_data_no_copy(actuator_general_config_t* config){
-    if(controller_address == 0){        
+    if(controller_address == 0){
+        uart_reset_message(&config->dlog.uart_message);        
         uart_queue_message(&config->dlog.uart_message);
     } else {
         can_send_message_any_ch(&config->dlog.can_message);
@@ -74,7 +77,7 @@ void actuator_init_common_config(actuator_general_config_t* general, uint8_t len
             CAN_NO_REMOTE_FRAME,
             CAN_EXTENDED_FRAME,
             CAN_HEADER(general->global_id, general->local_id),
-            &general->tx_data[UART_HEADER_SIZE-1],
+            general->tx_data,
             length);
     
     uart_init_message(&general->dlog.uart_message, 

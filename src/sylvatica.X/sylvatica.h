@@ -21,6 +21,8 @@
 #define SYLVATICA_BLOCK2_OUTPUT_SIZE       (SYLVATICA_BLOCK2_INPUT_SIZE / SYLVATICA_DEC_FACT_F2)
 #define SYLVATICA_BLOCK3_OUTPUT_SIZE       (SYLVATICA_BLOCK3_INPUT_SIZE / SYLVATICA_DEC_FACT_F3)
 
+#define SYLVATICA_I2C_READ_CH_BUFFER_LENGTH 3
+
 // length in words/samples per channel of the buffer to save the output data into after filtering
 
 // length in bytes of the I2C read buffer
@@ -77,6 +79,12 @@ typedef enum {
     SYLVATICA_CHANNEL_ENABLED,
     SYLVATICA_CHANNEL_DISABLED,
 } sylvatica_channel_status_t;
+
+typedef enum {
+    SYLVATICA_STATUS_INIT,
+    SYLVATICA_STATUS_READY,
+    SYLVATICA_STATUS_RUNNING,        
+} sylvatica_status_t;
 
 typedef struct {
     adc_config_t adc_config;

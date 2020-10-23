@@ -31,6 +31,7 @@ i2c_error_t opt3001q1_init_sensor(sensor_opt3001q1_config_t* config){
         controller,
         3,
         opt3001q1_i2c_cb_read,
+            NULL,
         (uint8_t*) config,
         0,
         config->general.i2c_bus,
@@ -52,18 +53,18 @@ i2c_error_t opt3001q1_init_sensor(sensor_opt3001q1_config_t* config){
     config->m_control_data[0] = 0x10; // configuration register
     
     config->m_control_data[1] = 0b11001010;
-    /*                 |-- read only
-     *               ||--- single shot mode
-     *              |----- 800 ms measurement  
-     *          ||||------ auto scale mode
-     */
+                      /*                 |-- read only bit
+                       *               ||--- single shot mode
+                       *              |----- 800 ms measurement  
+                       *          ||||------ auto scale mode
+                       */
     config->m_control_data[2] = 0b00000000;
-    /*                ||-- 1 fault count
-     *               |---- do not mask exponent field
-     *              |----- INT active low  
-     *             |------ latch not cleared by user
-     *          |||------- read only
-     */
+                      /*                ||-- 1 fault count
+                       *               |---- do not mask exponent field
+                       *              |----- INT active low  
+                       *             |------ latch not cleared by user
+                       *          |||------- read only
+                       */
     
     i2c_init_message(&config->m_control,
         I2C_WRITE_ADDRESS(config->general.address),
@@ -72,13 +73,14 @@ i2c_error_t opt3001q1_init_sensor(sensor_opt3001q1_config_t* config){
         controller,
         3,
         i2c_dummy_callback, // we do not yet set the correct controller here
+            NULL,
         (uint8_t*) config,
         0,
         config->general.i2c_bus,
         NULL);
     
     // configuration of the read data register
-    config->m_read_setup.data[0] = 0; // TODO
+    config->m_read_setup.data[0] = 0;
     
     //config->m_read.address = address;
     switch(config->m_read_setup.i2c_bus){
@@ -99,6 +101,7 @@ i2c_error_t opt3001q1_init_sensor(sensor_opt3001q1_config_t* config){
         controller,
         3,
         i2c_dummy_callback,
+            NULL,
         (uint8_t*) config,
         0,
         config->general.i2c_bus,

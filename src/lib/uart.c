@@ -2,6 +2,11 @@
 #include <stdint.h>
 #include <utilities.h>
 #include <device_configuration.h>
+#include <can.h>
+#include <address.h>
+#ifndef __ONLY_DEBUG__
+#include "actuators.h"
+#endif
 
 
 // *****************************************************************************
@@ -30,30 +35,25 @@ volatile uint8_t uart_ongoing = 0;
 uart_message_t uart_loopback;
 uint8_t uart_loopback_data[PRINT_BUFFER_LENGTH];
 
-#include <can.h>
-#include <address.h>
-
-
 uint8_t uart_dma_message_data[128];
 
 volatile uint8_t uart_rx_state = 0;
 volatile uint8_t uart_rx_idx = 0;
 
-uart_message_t uart_print_message;
+uart_message_t uart_print_message = {.status = UART_MSG_SENT};
 uint8_t uart_print_message_data[128];
 uart_message_t uart_command_message;
 uint8_t uart_command_message_data[UART_MESSAGE_BUFFER_LENGTH];
 
 uint8_t uart_id = 0;
 
+volatile uint8_t start_sensors_init = 0;
+
 void uart_init( uint32_t baudrate ) { 
 
 #ifdef ENABLE_DEBUG
     unsigned int i;
 #endif
-    
-    uart_command_message.status = UART_MSG_SENT;
-    uart_print_message.status = UART_MSG_SENT;
     
 #ifdef ENABLE_DEBUG
     U2MODEbits.STSEL = 0;   // 1-stop bit
@@ -123,6 +123,9 @@ void uart_init( uint32_t baudrate ) {
             0,            
             uart_print_message_data,
             0);
+    
+    uart_command_message.status = UART_MSG_SENT;
+    uart_print_message.status = UART_MSG_SENT;
 }
 
 
@@ -212,10 +215,13 @@ void __attribute__ ( (interrupt, no_auto_psv) ) _U2RXInterrupt( void ) {
             
             n_uart_rx_messages++;
             uart_rx_state = 0;
+            
+            uart_rx_command_cb();
 
             break;
         default:
             uart_rx_state = 0;
+            break;
     }
     _U2RXIF = 0;
 }
@@ -225,9 +231,11 @@ void __attribute__ ( (interrupt, no_auto_psv) ) _U2TXInterrupt( void ) {
 }
 
 inline void uart_rx_command_cb(){
+#ifndef __ONLY_DEBUG__
     can_message_t can_m;
-    uint8_t can_data[8];
+    uint8_t can_data[CAN_MAX_N_BYTES];
     uart_message_t m = uart_rx_queue[uart_rx_read_idx];
+    bool status;
     
     uart_rx_read_idx = (uart_rx_read_idx + 1) % UART_RX_BUFFER_SIZE;
     
@@ -237,10 +245,9 @@ inline void uart_rx_command_cb(){
         // TODO: handle errors over here
     }
     
-    can_m.identifier = controller_can_address;
-    can_m.extended_frame = 0;
-    can_m.remote_frame = 0;
-    can_m.data = can_data;
+    // prepare CAN message if needed
+    can_init_message(&can_m, controller_can_address, 
+            CAN_NO_REMOTE_FRAME, CAN_EXTENDED_FRAME, m.extended_id, can_data, 0);
     
     switch(m.command){
         case SERIAL_START_MEAS_CMD:
@@ -249,18 +256,13 @@ inline void uart_rx_command_cb(){
             can_send_message_any_ch(&can_m);
             delay_ms(1);
 #ifdef __LOG__
-            sprintf(print_buffer, "Sampling...");
-            uart_print(print_buffer, strlen(print_buffer));
+            uart_simple_print("Sampling...");
 #endif
             //start_sampling();
             break;
         case SERIAL_STOP_MEAS_CMD:
-            //stop_sampling();
-            delay_us(100);
-            
-            can_m.data_length = 1;
-            can_data[0] = CAN_INFO_MSG_STOP_MEAS;
-            can_send_message_any_ch(&can_m);
+            // measurements stop immediately, reset device 
+            asm ("RESET");
             break;
         case SERIAL_SENSOR_ACTIVATE_CMD:
             can_m.data_length = 2;
@@ -277,6 +279,7 @@ inline void uart_rx_command_cb(){
         case SERIAL_RESET_NODE_CMD:
             if(m.length == 1){
                 if(m.data[0] == controller_address){
+                    i2c_empty_queue();
                     asm ("RESET");
                 } else {
                     can_m.data_length = 2;
@@ -392,11 +395,21 @@ inline void uart_rx_command_cb(){
             
             can_send_message_any_ch(&can_m);
             break;
+        case SERIAL_START_INIT:
+            start_sensors_init = 1;
+            break;
         default:
+            status = process_actuator_serial_command(&m);
+
+            // TODO process_sensor_serial_command(&m);
+            if(!status){
+                sprintf(print_buffer, "UART: serial command `%x` not supported.", m.command);
+                print_error(print_buffer, strlen(print_buffer));
+            }
             break;
     }
-    
     m.status = UART_MSG_NONE;
+#endif
     
     n_uart_rx_messages--;
 }
@@ -412,13 +425,16 @@ void uart_print(const char* message, size_t length){
     
     uint16_t i;
     
-    while(uart_print_message.status != UART_MSG_SENT);
+    if(uart_print_message.status != UART_MSG_INIT_DONE){
+        while(uart_print_message.status != UART_MSG_SENT);
+    }
     
     uart_print_message.length = length;
     for(i = 0; i < length; i++){
         uart_print_message.data[i] = message[i];
     }
    
+    uart_reset_message(&uart_print_message);
     uart_queue_message(&uart_print_message);
     
     while(uart_print_message.status != UART_MSG_SENT);
@@ -428,7 +444,7 @@ void uart_print(const char* message, size_t length){
 void process_uart_queue(void){
     uart_message_t* m;
     
-    if((uart_ongoing == 0) && (uart_queue_idx != uart_queue_valid)){
+    if((uart_ongoing == 0) && (uart_queue_idx != uart_queue_valid) && (n_uart_messages > 0)){
         // copy to actual message to transmit
         
         uart_ongoing = 1;
@@ -456,6 +472,11 @@ void uart_queue_message(uart_message_t* m){
     // wait for space in the queue
     while(n_uart_messages == UART_MESSAGE_BUFFER_LENGTH);
     
+    if(m->status != UART_MSG_INIT_DONE){
+        return;
+    }
+        
+    
     // queue message
     m->status = UART_MSG_QUEUED;
     uart_queue[uart_queue_idx] = m;
@@ -479,8 +500,11 @@ void __attribute__((__interrupt__,no_auto_psv)) _DMA14Interrupt(void){
     _DMA14IF = 0;   // Clear the DMA0 Interrupt Flag
 }
 
-
-
+void uart_reset_message(uart_message_t* m){
+    if((m->status != UART_MSG_QUEUED) && (m->status != UART_MSG_TRANSFERRED)){
+        m->status = UART_MSG_INIT_DONE;
+    }
+}
 
 
 void uart_parse_to_buffer(uint8_t* data, uart_message_t* m, const size_t max_length){
@@ -511,6 +535,7 @@ void uart_init_message(uart_message_t* m,
     m->id = id;
     m->extended_id = extended_id;
     m->length = length;
+    m->status = UART_MSG_INIT_DONE;
 }
 
 void uart_await_tx(uart_message_t* m){

@@ -40,66 +40,6 @@ void init_dali(void){
 	dali_transmit(DALI_BROADCAST_C, DALI_ON_C);  //broadcast on
 }
 
-void init_dali_timer(void){
-    // DALI operates at 1200 baud -> 2400 Hz interrupt rate
-    T8CONbits.TON = 0;
-    T8CONbits.TCS = 0; // use internal instruction cycle as clock source
-    T8CONbits.TGATE = 0; // disable gated timer
-    T8CONbits.TCKPS = 0b11; // prescaler 1:256
-    TMR8 = 0; // clear timer register
-    PR8 = 104 - 1; // set period to get 2403.8 Hz
-    _T8IF = 0; // clear interrupt flag
-    _T8IE = 1; // enable interrupt
-}
-
-void __attribute__ ( (__interrupt__, no_auto_psv) ) _T8Interrupt( void ){
-    static uint8_t b;
-    
-    if(bit_tx_state == DALI_FIRST_HALF){
-        bit_tx_state = DALI_SECOND_HALF;
-    } else {
-        bit_tx_state = DALI_FIRST_HALF;
-    }
-    
-    if(bit_tx_state == DALI_FIRST_HALF){
-        if(dali_n_tx_bits == 0){
-            // the final bit was transmitted 
-            //   -> stop and prepare for next transmission
-            T8CONbits.TON = 0;
-            bit_tx_state = DALI_SECOND_HALF;
-            
-            // set bus to idle state
-            if(config.dali_bus_invert){
-                CLEAR_PORT_BIT(config.tx_pin);
-            } else {
-                SET_PORT_BIT(config.tx_pin);
-            }
-        } else {
-            // the previous bit was transmitted
-            //   -> transmit new bit
-            b = dali_tx_data & 0x1;
-            dali_tx_data = dali_tx_data >> 1;
-            dali_n_tx_bits--;
-            
-            if(b == 0){
-                SET_PORT_BIT(config.tx_pin);
-            } else {
-                CLEAR_PORT_BIT(config.tx_pin);
-            }
-        }
-        
-    } else {
-        // transmit second portion of bit
-        if(b == 0){
-            CLEAR_PORT_BIT(config.tx_pin);
-        } else {
-            SET_PORT_BIT(config.tx_pin);
-        }
-    }
-    
-    _T8IF = 0;
-}
-
 
 void dali_transmit(uint8_t address, uint8_t data){
     uint32_t tmp;
@@ -120,6 +60,4 @@ void dali_transmit(uint8_t address, uint8_t data){
     if(config.dali_bus_invert){
         dali_tx_data = ~dali_tx_data;
     }
-    
-    T8CONbits.TON = 1;
 }

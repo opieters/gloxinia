@@ -64,6 +64,7 @@ extern "C" {
         CAN_DATA_CMD_LICOR              = 0x08,
         CAN_DATA_CMD_PUMP               = 0x09,
         CAN_DATA_CMD_GROWTH_CHAMBER     = 0x0A,
+        CAN_DATA_CMD_RELAY_BOARD        = 0x0B,
         CAN_CONFIG_CMD_APDS9301         = 0x31,
         CAN_CONFIG_CMD_OPT3001Q1        = 0x32,
         CAN_CONFIG_CMD_BH1721FVC        = 0x33,
@@ -90,7 +91,7 @@ extern "C" {
         CAN_INFO_MSG_SCHEDULE_I2C,
         CAN_INFO_LIA_GAIN_SET,
         CAN_INFO_CMD_MEASUREMENT_START,
-        
+        CAN_INFO_CMD_ACTUATOR_START,
         CAN_CONFIG_CMD,
         N_CAN_MSG
     } can_cmd_t;

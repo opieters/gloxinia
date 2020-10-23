@@ -81,6 +81,8 @@ struct sensor_sylvatica_config_s {
     
     sensor_sylvatica_channel_config_t channels[SYLVATICA_N_CHANNELS];
     sensor_sylvatica_raw_channel_config_t raw_channels[SYLVATICA_N_CHANNELS];
+    
+    uint16_t sample_time;
 };
 
 
@@ -97,7 +99,7 @@ void sylvatica_sensor_init_channel(sensor_sylvatica_channel_config_t* config,
 void sylvatica_sensor_init_raw_channel(sensor_sylvatica_raw_channel_config_t* config, 
         sensor_sylvatica_config_t* sensor_config, 
         const uint8_t channel_n);
-i2c_error_t sylvatica_init_sensor(sensor_sylvatica_config_t* config);
+i2c_error_t sylvatica_sensor_init(sensor_sylvatica_config_t* config);
 
 void sylvatica_measurement_read_cb(i2c_message_t* m);
 void sylvatica_measurement_raw_read_cb(i2c_message_t* m);

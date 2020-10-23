@@ -11,7 +11,7 @@
 #include <dac.h>
 #include <spi.h>
 
-i2c_error_t sht35_init(sensor_sht35_config_t* config){  
+i2c_error_t sht35_init_sensor(sensor_sht35_config_t* config){  
     void (*controller)(i2c_message_t*);
     void (*callback)(i2c_message_t* m);
     
@@ -49,6 +49,7 @@ i2c_error_t sht35_init(sensor_sht35_config_t* config){
             controller,
             3,
             callback,
+            NULL,
             (uint8_t*) config,
             0,
             config->general.i2c_bus,
@@ -151,6 +152,7 @@ i2c_error_t sht35_init(sensor_sht35_config_t* config){
             controller,
             3,
             sht35_i2c_cb_periodic_m_fetch,
+                NULL,
             (uint8_t*) config,
             0,
             config->general.i2c_bus,
@@ -197,6 +199,7 @@ i2c_error_t sht35_init(sensor_sht35_config_t* config){
         controller,
         3,
         i2c_dummy_callback,
+            NULL,
         (uint8_t*) config,
         0,
         config->general.i2c_bus,

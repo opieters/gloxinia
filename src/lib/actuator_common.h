@@ -38,8 +38,8 @@ typedef struct actuator_general_config_s {
     actuator_log_t dlog;
     actuator_elog_t elog;
 
-    uint8_t tx_data[CAN_MAX_N_BYTES+UART_HEADER_SIZE];
-    uint8_t error_data[UART_HEADER_SIZE+ERROR_DATA_SIZE];
+    uint8_t tx_data[CAN_MAX_N_BYTES];
+    uint8_t error_data[ERROR_DATA_SIZE];
 } actuator_general_config_t;
 
 

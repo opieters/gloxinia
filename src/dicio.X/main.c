@@ -41,6 +41,9 @@
 #pragma config APL = OFF                        // Auxiliary Segment Code-protect bit (Aux Flash Code protect is disabled)
 #pragma config APLK = OFF                       // Auxiliary Segment Key bits (Aux Flash Write Protection and Code Protection is Disabled)
 
+extern volatile uint8_t start_sensors_init;
+uint16_t i;
+
 int main ( void ){
 
     // Configure Oscillator to operate the device at 64MHz with internal 
@@ -69,20 +72,33 @@ int main ( void ){
 #ifdef ENABLE_DEBUG
     uart_init(500000);
     
-    sprintf(print_buffer, "Configured UART.");
-    uart_print(print_buffer, strlen(print_buffer));
+    uart_simple_print("Configured UART.");
 #endif
+    
+    delay_ms(1000);
     
     actuators_data_init();
     sensors_data_init();
 
+    delay_ms(1000);
+    
     dicio_init();
     
+    delay_ms(1000);
+    
+    uart_simple_print("Waiting for start command.");
+    
+    while(!start_sensors_init);
+    
+    delay_ms(1000);
+    
     sensors_init();
+    
+    delay_ms(1000);
+    
     actuators_init();
     
-    // wait for 12 seconds
-    delay_ms(12000);
+    delay_ms(3000);
 
     // start the sensors
     sensors_start();

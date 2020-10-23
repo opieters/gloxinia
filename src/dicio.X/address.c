@@ -40,6 +40,7 @@ i2c_mstatus_t set_device_address(void){
             i2c1_read_controller,
             3, 
             address_data_processor, 
+            NULL,
             NULL, 
             0, 
             I2C1_BUS,

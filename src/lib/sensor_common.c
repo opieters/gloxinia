@@ -10,7 +10,7 @@ void sensor_init_common_config(sensor_general_config_t* general, uint8_t length)
             CAN_NO_REMOTE_FRAME,
             CAN_EXTENDED_FRAME,
             CAN_HEADER(general->global_id, general->local_id),
-            &general->tx_data[UART_HEADER_SIZE-1],
+            general->tx_data,
             length);
     
     uart_init_message(&general->dlog.uart_message, 
@@ -54,6 +54,7 @@ void sensor_send_error(sensor_elog_t* elog, i2c_message_t* m){
         if(elog->uart_message.status == UART_MSG_SENT){
             elog->uart_message.data[2] = m->status;
             elog->uart_message.data[3] = m->error;
+            uart_reset_message(&elog->uart_message);
             uart_queue_message(&elog->uart_message);
         }
     } else {
@@ -75,6 +76,7 @@ void sensor_send_data(sensor_log_t* dlog, uint8_t* data, uint8_t length){
         }
         m->length = length;
         
+        uart_reset_message(m);
         uart_queue_message(m);
     } else {
         can_message_t* m = &dlog->can_message;
@@ -99,6 +101,7 @@ void sensor_send_data_no_copy(sensor_log_t* dlog, uint8_t* data, uint8_t length)
         m->length = length;
         m->data = data;
         
+        uart_reset_message(m);
         uart_queue_message(m);
     } else {
         can_message_t* m = &dlog->can_message;

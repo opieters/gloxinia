@@ -65,6 +65,7 @@ struct sensor_planalta_config_s {
     
     sensor_planalta_channel_config_t channels[PLANALTA_N_ADC_CHANNELS];
 
+    uint16_t sample_time;
 };
 
 

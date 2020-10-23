@@ -65,10 +65,6 @@ fractional f4_to_fx_buffer_i_b[PLANALTA_N_ADC_CHANNELS][PLANALTA_FX_INPUT_SIZE];
 fractional f4_to_fx_buffer_q_b[PLANALTA_N_ADC_CHANNELS][PLANALTA_FX_INPUT_SIZE];
 fractional output_buffer_a_i[PLANALTA_N_ADC_CHANNELS];
 fractional output_buffer_a_q[PLANALTA_N_ADC_CHANNELS];
-fractional output_buffer_b_i[PLANALTA_N_ADC_CHANNELS];
-fractional output_buffer_b_q[PLANALTA_N_ADC_CHANNELS];
-
-bool output_buffer_full = false;
 
 //uint16_t n_writes_output_buffer_a[PLANALTA_N_ADC_CHANNELS];
 //uint16_t n_writes_output_buffer_b[PLANALTA_N_ADC_CHANNELS];
@@ -76,7 +72,6 @@ bool output_buffer_full = false;
      
 void init_filtering(void){
     uint16_t i;
-    output_buffer_full = false;
     
     for(i = 0; i < PLANALTA_N_ADC_CHANNELS; i++){
         fo2_buffer_i_read[i] = f1_to_f2_buffer_i_b[i];
@@ -145,8 +140,6 @@ void planalta_clear_filter_buffers(void){
     }
     for(i = 0; i < PLANALTA_N_ADC_CHANNELS; i++){
         output_buffer_a_i[i] = 0;
-        output_buffer_b_i[i] = 0;
         output_buffer_a_q[i] = 0;
-        output_buffer_b_q[i] = 0;
     }
 }

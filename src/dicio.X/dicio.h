@@ -40,6 +40,8 @@ extern "C" {
     void dicio_init_pins(void);
     
     void dicio_init_clock_sync(void);
+    void dicio_start_clock_sync(void);
+    void dicio_stop_clock_sync(void);
     
     void dicio_dummy_callback(void);
     

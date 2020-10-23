@@ -17,7 +17,6 @@ extern fractional output_buffer_a_i[PLANALTA_N_ADC_CHANNELS];
 extern fractional output_buffer_a_q[PLANALTA_N_ADC_CHANNELS];
 extern fractional output_buffer_b_i[PLANALTA_N_ADC_CHANNELS];
 extern fractional output_buffer_b_q[PLANALTA_N_ADC_CHANNELS];
-extern bool output_buffer_full;
 
 #define PLANALTA_ADC { \
     .channel_select = ADC_CHANNEL_SELECT_MODE_AUTO,\
@@ -114,9 +113,11 @@ planalta_config_t gconfig = {
         PIN_INIT(B, 7),
     },
     .int_pin = PIN_INIT(D, 0),
+    .status = PLANALTA_STATUS_INITIALISING,
 };
 
-
+i2c_message_t i2c_channel_message[PLANALTA_N_ADC_CHANNELS];
+uint8_t i2c_channel_data[PLANALTA_N_ADC_CHANNELS][PLANALTA_I2C_READ_CH_BUFFER_LENGTH];
 
 i2c_message_t i2c_mr_message;
 uint8_t i2c_mr_message_data[PLANALTA_I2C_READ_BUFFER_LENGTH];
@@ -380,15 +381,28 @@ bool check_planalta_config(planalta_config_t* config){
     return true;
 }
 
+void init_i2c_message_buffers(void){
+    uint16_t i;
+    
+    for(i = 0; i < PLANALTA_N_ADC_CHANNELS; i++){
+        i2c_channel_message[i].data = i2c_channel_data[i];
+        
+        i2c_channel_data[i][0] = 4;
+    }
+    
+}
+
 void init_planalta(void){  
     uint16_t i;
     
     // error function
-    set_error_loop_fn(i2c_detect_stop);
+    set_error_loop_fn(i2c1_detect_stop);
     set_error_pin(&gconfig.blinky_pin);
     
     init_filtering();
     planalta_clear_buffers();
+    
+    init_i2c_message_buffers();
     
     init_pins_planalta();
 #ifdef ENABLE_DEBUG
@@ -452,8 +466,6 @@ void init_planalta(void){
     sprintf(print_buffer, "Initialised DAC.");
     uart_print(print_buffer, strlen(print_buffer));
 #endif
-       
-    
     
     init_adc(&gconfig.adc_config);  
 #ifdef ENABLE_DEBUG
@@ -473,9 +485,15 @@ void init_planalta(void){
 #endif
     planalta_output_calibration(&gconfig);
     
-#ifdef ENABLE_DEBUG
+    gconfig.status = PLANALTA_STATUS_READY;
+    
+/*#ifdef ENABLE_DEBUG
     adc_start(&gconfig.adc_config);
-#endif
+    
+    gconfig.status = PLANALTA_STATUS_RUNNING;
+#endif*/
+    
+    
 }
 
 
@@ -488,8 +506,10 @@ void loop_planalta(void){
     while(1){
         
         while(gconfig.adc_config.status != ADC_STATUS_ON){
-            i2c_detect_stop();
+            i2c1_detect_stop();
         }
+        
+        gconfig.status = PLANALTA_STATUS_RUNNING;
         
         switch(gconfig.signal_frequency){
             case PLANALTA_FILTER_SEL_50KHZ:
@@ -513,6 +533,29 @@ void loop_planalta(void){
 
 void i2c_mr_sw_cb_planalta(i2c_message_t* m){
     
+}
+
+void planalta_i2c_read_config(const planalta_reg_t reg){
+    switch(reg){
+        case PLANALTA_REG_STATUS:
+            i2c_mr_message_data[0] = 1;
+            i2c_mr_message_data[1] = 0;
+            i2c_mr_message_data[1] |= gconfig.status;
+
+            i2c_init_read_message(
+                &i2c_mr_message,
+                i2c_mr_message_data,
+                1+1);
+            break;
+        default:
+            i2c_init_read_message(
+                &i2c_mr_message,
+                i2c_mr_message_data,
+                0);
+            return;
+    }
+    
+    i2c_set_read_message(&i2c_mr_message);
 }
 
 void i2c_mw_sr_cb_planalta(i2c_message_t* m){
@@ -542,28 +585,32 @@ void i2c_mw_sr_cb_planalta(i2c_message_t* m){
                     asm ("RESET");
                 }
             }
+            planalta_i2c_read_config(i2c_write_reg);
             break;                
         case PLANALTA_REG_ADC:
             if(m->data_length >= 2){ 
                 if((m->data[1] & PLANALTA_ADC_ON) == PLANALTA_ADC_ON){
                     adc_start(&gconfig.adc_config);
+                    gconfig.status = PLANALTA_STATUS_RUNNING;
                 } else {
                     gconfig.adc_config.status = ADC_STATUS_IDLE;
                     adc_stop(&gconfig.adc_config);
+                    gconfig.status = PLANALTA_STATUS_READY;
                 }
             }
+            planalta_i2c_read_config(i2c_write_reg);
             break;
         case PLANALTA_REG_CONFIG_CH0:
-            planalta_i2c_channel_config(0, m->data);
+            planalta_i2c_channel_config(0, &m->data[1]);
             break;
         case PLANALTA_REG_CONFIG_CH1:
-            planalta_i2c_channel_config(1, m->data);
+            planalta_i2c_channel_config(1, &m->data[1]);
             break;
         case PLANALTA_REG_CONFIG_CH2:
-            planalta_i2c_channel_config(2, m->data);
+            planalta_i2c_channel_config(2, &m->data[1]);
             break;
         case PLANALTA_REG_CONFIG_CH3:
-            planalta_i2c_channel_config(3, m->data);
+            planalta_i2c_channel_config(3, &m->data[1]);
             break;
         case PLANALTA_REG_DATA_I0:
             planalta_i2c_read_copy_buffer_data(7);
@@ -594,48 +641,52 @@ void i2c_mw_sr_cb_planalta(i2c_message_t* m){
                 //TODO
                 //gconfig.dac_config.channels[0].pwm_period = (m->data[1] << 8) + m->data[2];
             } 
+            planalta_i2c_read_config(i2c_write_reg);
             break;
         case PLANALTA_REG_CONFIG_T1:
             if(m->data_length >= 3){
                 //TODO
                 //gconfig.dac_config.channels[1].pwm_period = (m->data[1] << 8) + m->data[2];
             }
+            planalta_i2c_read_config(i2c_write_reg);
             break;
         default:
             break;
     }
 }
 
-void planalta_i2c_read_copy_buffer_data(uint8_t channel_n){
-    fractional output_i, output_q;
+
+void planalta_i2c_read_buffer_write(uint8_t* data, size_t length){
+    size_t i;
     
-    if((!output_buffer_full) || (channel_n > 7) || (channel_n < 0)){
+    length = MIN(ARRAY_LENGTH(i2c_mr_message_data), length);
+    
+    i2c_mr_message_data[0] = (uint8_t) length;
+    
+    for(i = 0; i < length; i++){
+        i2c_mr_message_data[i+1] = data[i];
+    }
+    i2c_init_read_message(
+        &i2c_mr_message,
+        i2c_mr_message_data,
+        length+1);
+    
+    i2c_set_read_message(&i2c_mr_message);
+    
+    SET_PORT_BIT(gconfig.int_pin);
+}
+
+void planalta_i2c_read_copy_buffer_data(uint8_t channel_n){    
+    if((channel_n > 7) || (channel_n < 0)){
         i2c_init_read_message(
             &i2c_mr_message,
             i2c_mr_message_data,
             0);
-    }    
+        i2c_set_read_message(&i2c_mr_message);
+    } else {
+        i2c_set_read_message(&i2c_channel_message[channel_n]);
+    }
     
-    output_i = output_buffer_b_i[channel_n];
-    output_q = output_buffer_b_q[channel_n];
-
-    i2c_mr_message_data[0] = 4;
-    
-    // read I value
-    i2c_mr_message_data[1] = (output_i >> 8) & 0xff;
-    i2c_mr_message_data[2] = output_i & 0xff;
-    // read Q value
-    i2c_mr_message_data[3] = (output_q >> 8) & 0xff;
-    i2c_mr_message_data[4] = output_q & 0xff;
-    
-    i2c_init_read_message(
-        &i2c_mr_message,
-        i2c_mr_message_data,
-        4+1);
-    
-    i2c_set_read_message(&i2c_mr_message);
-    
-    output_buffer_full = false;
     SET_PORT_BIT(gconfig.int_pin);
 }
 
@@ -671,16 +722,16 @@ void planalta_channel_config(uint8_t channel_n,
     } else {
         switch(channel_n){
             case 0:
-                _RP98R = _RPOUT_PORT;   // DRV1 signal
+                _RP98R = 0;   // DRV1 signal
                 _RF2 = 0;
             case 1:
-                _RP99R = _RPOUT_PORT;   // DRV2 signal
+                _RP99R = 0;   // DRV2 signal
                 _RF3 = 0;
             case 2:
-                _RP101R = _RPOUT_PORT;  // DRV3 signal
+                _RP101R = 0;  // DRV3 signal
                 _RF4 = 0;
             case 3:
-                _RP100R = _RPOUT_PORT;  // DRV4 signal
+                _RP100R = 0;  // DRV4 signal
                 _RF5 = 0;
             default:
                 break;

@@ -6,6 +6,8 @@
 #include "address.h"
 #include <device_configuration.h>
 #include <can.h>
+#include "sensors.h"
+#include "actuators.h"
 
 #define BRGVAL      ( (FCY / BAUDRATE) / 16 ) - 1
 #define DICIO_BLINKY_PIN PIN_INIT(B, 5)
@@ -81,7 +83,7 @@ void init_sample_timer(void){
 
 void init_sample_detection(void){
     // start timer 
-    _INT0EP = 1;
+    _INT0EP = 0; // interrupt on the positive edge
     
     _INT0IF = 0; // clear interrupt flag
     _INT0IE = 1; // enable interrupt
@@ -95,17 +97,26 @@ void __attribute__ ( (__interrupt__, no_auto_psv) ) _T9Interrupt( void ){
 
 void __attribute__ ( (__interrupt__, no_auto_psv) ) _INT0Interrupt( void ){
     __sensor_timer_callback();
-    //__actuator_timer_callback();
+    __actuator_timer_callback();
     _INT0IF = 0;
 }
 
 void dicio_init_pins(void){
     // I2C1 pins
     // pin configuration
-    _ODCG2 = 1;  // configure I2C pins as open drain output
-    _ODCG3 = 1; // configure I2C pins as open drain output
+    
     _TRISG2 = 0;
     _TRISG3 = 0;
+    _LATG2 = 1;
+    _LATG3 = 0;
+    delay_ms(1);
+    _LATG2 = 1;
+    _LATG3 = 1;
+    delay_ms(1);
+    _ODCG2 = 1;  // configure I2C pins as open drain output
+    _ODCG3 = 1; // configure I2C pins as open drain outputs
+    
+    
     _ANSC13 = 0; // configure nINT1 as digital pin
     _TRISC13 = 1; // configure nINT1 as digital input pin    
     //_ANSC14 = 0; // configure nRST1 as digital pin
@@ -116,10 +127,18 @@ void dicio_init_pins(void){
     _LATB8 = 1;
     
     // I2C2 pins
-    _ODCF4 = 1; // configure I2C pins as open drain output
-    _ODCF5 = 1; // configure I2C pins as open drain output
     _TRISF4 = 0;
     _TRISF5 = 0;
+    
+    _LATF5 = 1;
+    _LATF4 = 0;
+    delay_ms(1);
+    _LATF4 = 1;
+    _LATF5 = 1;
+    delay_ms(1);
+    _ODCF4 = 1; // configure I2C pins as open drain output
+    _ODCF5 = 1; // configure I2C pins as open drain output
+    
     _ANSB15 = 0; // configure nINT1 as digital pin
     _TRISB15 = 1; // configure nINT2 as digital input pin 
     _ODCD8 = 1;
@@ -142,14 +161,22 @@ void dicio_init_pins(void){
     _U2RXR = 119;
     
     // UART to peripheral
-    _TRISF3 = 0;            // U1 RTS
-    _RP99R = _RPOUT_U1RTS;
+    //_TRISF3 = 0;            // U1 RTS
+    //_RP99R = _RPOUT_U1RTS;
     _TRISF2 = 0;            // U1 TX
     _RP98R = _RPOUT_U1TX;
-    _TRISD9 = 1;            // U1 CTS
-    _U1CTSR = 73;
+    //_TRISD9 = 1;            // U1 CTS
+    //_U1CTSR = 73;
     _TRISD10 = 1;           // U1 RX
     _U1RXR = 74;
+    
+    // UART to peripheral
+    /*_TRISF3 = 0;            // U3 TX
+    _RP99R = _RPOUT_U3TX;
+    _TRISD9 = 1;           // U3 RX
+    _U3RXR = 73;*/
+    _TRISF3 = 1;
+    _TRISD9 = 1;
     
     // CAN
     // ECAN pin configuration
@@ -269,6 +296,55 @@ void detect_can_devices(void){
     }
 }
 
+void init_trigger_generation(void){
+    // configure OC3 and OC4 to generate a pulse every 100ms
+    OC3CON1bits.OCM = 0b000; // Disable Output Compare Module
+    OC4CON1bits.OCM = 0b000; // Disable Output Compare Module
+    
+    // user peripheral clock as clock source
+    OC3CON1bits.OCTSEL = 0b111; 
+    OC4CON1bits.OCTSEL = 0b111;
+    
+    // Write the frequency for the PWM pulse
+    uint32_t period_value = FCY / 10;
+    
+    OC3RS = (uint16_t) (period_value - 1);
+    OC4RS = (uint16_t) ((period_value - 1) >> 16);
+    
+    // Write the duty cycle for the PWM pulse
+    period_value /= 2;
+    OC3R = (uint16_t) (period_value - 1);
+    OC4R = (uint16_t) ((period_value - 1) >> 16);
+    
+    // no sync or trigger source
+    OC3CON2bits.SYNCSEL = 0b11111; 
+    OC4CON2bits.SYNCSEL = 0b11111; 
+    
+    // continue operation in CPU idle mode
+    OC3CON1bits.OCSIDL = 0;
+    OC4CON1bits.OCSIDL = 0;
+    
+    // synchronised mode
+    OC3CON2bits.OCTRIG = 0;
+    OC4CON2bits.OCTRIG = 0;
+    
+    // output 
+    OC3CON2bits.OCTRIS = 1; // since the OC3 pin is not used, the output should be tri-stated
+    
+    // enable cascade operation
+    OC4CON2bits.OC32 = 1; // even module must be enabled first
+    OC3CON2bits.OC32 = 1;
+    
+    _OC3IF = 0;              // clear the OC3 interrupt flag
+    _OC3IE = 0;              // disable OC3 interrupt
+    _OC4IF = 0;              // clear the OC4 interrupt flag
+    _OC4IE = 0;              // disable OC4 interrupt
+    
+    // Select the Output Compare mode: EDGE-ALIGNED PWM MODE
+    OC4CON1bits.OCM = 0b110; 
+    OC3CON1bits.OCM = 0b110;
+}
+
 void dicio_init(void){
     i2c_error_t i2c_error;
     
@@ -287,6 +363,7 @@ void dicio_init(void){
         uart_print(print_buffer, strlen(print_buffer));
     #endif
     dicio_init_clock_sync();
+    dicio_start_clock_sync();
 
     #ifdef ENABLE_DEBUG        
         sprintf(print_buffer, "Initialised blinky.");
@@ -304,7 +381,7 @@ void dicio_init(void){
         sprintf(print_buffer, "Initialising I2C2.");
         uart_print(print_buffer, strlen(print_buffer));
     #endif
-    init_i2c2(&config.i2c_config[1]);
+    i2c2_init(&config.i2c_config[1]);
     
     #ifdef ENABLE_DEBUG        
         sprintf(print_buffer, "Initialising device address.");
@@ -334,6 +411,15 @@ void dicio_init(void){
         uart_print(print_buffer, strlen(print_buffer));
     #endif
     detect_can_devices();
+    
+    if(controller_address == 0){
+        _TRISD0 = 0;
+        _RP64R = _RPOUT_OC2;
+        init_trigger_generation();
+    } else {
+        _TRISD0 = 1;
+        init_sample_detection();
+    }
 }
 
 void dicio_loop(void){
@@ -354,6 +440,9 @@ void dicio_loop(void){
     while(1){
         while(1){
             i2c_process_queue();
+            
+            sensors_error_recover();
+            actuators_error_recover();
         }
     }
 }
@@ -377,8 +466,14 @@ void dicio_init_clock_sync(void){
     
     _OC1IF = 0;              // clear the OC1 interrupt flag
     _OC1IE = 0;              // disable OC1 interrupt
-    
+}
+
+void dicio_start_clock_sync(void){
     OC1CON1bits.OCM = 0b110; // Select the Output Compare mode: EDGE-ALIGNED PWM MODE
+}
+
+void dicio_stop_clock_sync(void){
+    OC1CON1bits.OCM = 0b000; // Select the Output Compare mode: EDGE-ALIGNED PWM MODE
 }
 
 void __attribute__((__interrupt__, no_auto_psv)) _OC1Interrupt(void) {    

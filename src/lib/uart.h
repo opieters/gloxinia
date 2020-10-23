@@ -11,6 +11,8 @@
 #define UART_MESSAGE_BUFFER_LENGTH 128
 #define UART_HEADER_SIZE 7
 
+#define uart_simple_print(X) uart_print(X, strlen(X));
+
 typedef enum {
     SERIAL_START_MEAS_CMD        = 0x00,
     SERIAL_STOP_MEAS_CMD         = 0x01,
@@ -35,15 +37,23 @@ typedef enum {
     SERIAL_SENSOR_CONFIG_CMD     = 0x14,
     SERIAL_ACTUATOR_DATA_CMD     = 0x15,
     SERIAL_ACTUATOR_ERROR_CMD    = 0x16,
-    N_SERIAL_CMD                 = 0x17,
+    SERIAL_ACTUATOR_TRIGGER_CMD  = 0x17,
+    SERIAL_ACTUATOR_GC_TEMP      = 0x18,
+    SERIAL_ACTUATOR_GC_RH        = 0x19,
+    SERIAL_ACTUATOR_GC_LEDS      = 0x1A,
+    SERIAL_ACTUATOR_PUMP         = 0x1B,
+    SERIAL_START_INIT            = 0x1C,
+            
+    N_SERIAL_CMD                 = 0x1D,
 } serial_cmd_t;
 
 typedef enum {
+    UART_MSG_NONE,
     UART_MSG_TRANSFERRED,
     UART_MSG_QUEUED,
     UART_MSG_SENT,
     UART_MSG_ERROR,
-    UART_MSG_NONE,
+    UART_MSG_INIT_DONE,
     UART_MSG_RECEIVED,
     N_UART_MSG_STATUS_T
 } uart_message_status_t;
@@ -82,6 +92,8 @@ extern "C" {
     void uart_parse_to_buffer(uint8_t* data, uart_message_t* m, size_t max_length);
     
     void uart_await_tx(uart_message_t* m);
+    
+    void uart_reset_message(uart_message_t* m);
 
 #ifdef	__cplusplus
 }

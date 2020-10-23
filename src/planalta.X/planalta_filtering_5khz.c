@@ -3,11 +3,10 @@
 #include <dsp.h>
 #include "planalta.h"
 #include <utilities.h>
+#include <uart.h>
 
-extern volatile uint8_t copy_buffer_selector;
 extern uint8_t adc_buffer_selector;
 
-extern volatile uint8_t start_filter_block0;
 extern uint8_t start_filter2, start_filter3, start_filter4, start_filter5;
 
 extern fractional* fo1_buffer_i_write[PLANALTA_N_ADC_CHANNELS];
@@ -49,12 +48,11 @@ extern fractional f4_to_fx_buffer_i_b[PLANALTA_N_ADC_CHANNELS][PLANALTA_5KHZ_FX_
 extern fractional f4_to_fx_buffer_q_b[PLANALTA_N_ADC_CHANNELS][PLANALTA_5KHZ_FX_INPUT_SIZE];
 extern fractional output_buffer_a_i[PLANALTA_N_ADC_CHANNELS];
 extern fractional output_buffer_a_q[PLANALTA_N_ADC_CHANNELS];
-extern fractional output_buffer_b_i[PLANALTA_N_ADC_CHANNELS];
-extern fractional output_buffer_b_q[PLANALTA_N_ADC_CHANNELS];
 
 extern planalta_config_t gconfig;
 
-extern uint8_t output_buffer_full;
+extern i2c_message_t i2c_channel_message[PLANALTA_N_ADC_CHANNELS];
+extern uint8_t i2c_channel_data[PLANALTA_N_ADC_CHANNELS][PLANALTA_I2C_READ_CH_BUFFER_LENGTH];
 
 void adc_rx_callback_5khz(void){
     uint16_t i = 0;
@@ -140,7 +138,6 @@ void adc_rx_callback_5khz(void){
         }
     }
     adc_buffer_selector ^= 1;
-
 }
 
 void run_filter2_5khz(void){
@@ -261,24 +258,30 @@ void run_filter5_5khz(void){
     uint16_t i;
     start_filter5 = 0; 
     
-    if(!output_buffer_full){
-        for(i = 0; i < PLANALTA_5KHZ_N_ADC_CHANNELS; i++){
-            output_buffer_b_i[i] = output_buffer_a_i[i];
-            output_buffer_b_q[i] = output_buffer_a_q[i];
-        }
-        output_buffer_full = true;
+    _SI2C1IE = 0;
+    for(i = 0; i < PLANALTA_5KHZ_N_ADC_CHANNELS; i++){
+        i2c_channel_data[i][1] = (uint8_t) ((output_buffer_a_i[i] >> 8) & 0xff);
+        i2c_channel_data[i][2] = (uint8_t) (output_buffer_a_i[i] & 0xff);
+        i2c_channel_data[i][3] = (uint8_t) ((output_buffer_a_q[i] >> 8) & 0xff);
+        i2c_channel_data[i][4] = (uint8_t) (output_buffer_a_q[i] & 0xff);
+
+        i2c_init_read_message(
+            &i2c_channel_message[i],
+            i2c_channel_data[i],
+            PLANALTA_I2C_READ_CH_BUFFER_LENGTH);
     }
+    _SI2C1IE = 1;
 
     for(i = 0; i < PLANALTA_5KHZ_N_ADC_CHANNELS; i++){
         fir_compressed(PLANALTA_5KHZ_FX_OUTPUT_SIZE,
                 &output_buffer_a_i[i],
-                fo4_buffer_i_read[i],
+                fo4_buffer_i_write[i],
                 &filters_8_i[i],
                 PLANALTA_DEC_FACT_F8);
 
         fir_compressed(PLANALTA_5KHZ_FX_OUTPUT_SIZE,
                 &output_buffer_a_q[i],
-                fo4_buffer_q_read[i],
+                fo4_buffer_q_write[i],
                 &filters_8_q[i],
                 PLANALTA_DEC_FACT_F8);
     }
@@ -294,45 +297,32 @@ void run_filter5_5khz(void){
 
 void planalta_filter_5khz(void) {
     while(gconfig.adc_config.status == ADC_STATUS_ON){
-        i2c_detect_stop();
+        i2c1_detect_stop();
         
         // ping-pong buffered data of in & out
         if(start_filter2){
             run_filter2_5khz();
         }
         
-        i2c_detect_stop();
+        i2c1_detect_stop();
         
-        // only input is ping-pong buffered -> filter 4 must be executed before
-        // filter 3 is executed again to avoid overwriting data
-        if(start_filter3){
-            run_filter3_5khz();
+        if(start_filter5){
+            run_filter5_5khz();
+            continue;
         }
         
-        i2c_detect_stop();
-        
-        // make sure that no data is lost of inner filtering (happens often)
-        if(start_filter2){
-            run_filter2_5khz();
-        }
-        
-        i2c_detect_stop();
+        i2c1_detect_stop();
         
         if(start_filter4){
             run_filter4_5khz();
+            continue;
         }
         
-        i2c_detect_stop();
+        i2c1_detect_stop();
         
-        if(start_filter2){
-            run_filter2_5khz();
-        }
-        
-        i2c_detect_stop();
-        
-        // has to be executed before filter 4 to avoid overwriting data
-        if(start_filter5){
-            run_filter5_5khz();
+        if(start_filter3){
+            run_filter3_5khz();
+            continue;
         }
     }
 }

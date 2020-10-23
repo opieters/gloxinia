@@ -53,7 +53,7 @@ volatile uint8_t start_filter_fs4 = 0;
 #define PLANALTA_FS_50KHZ_FO1_OUTPUT_SIZE   (ADC_BUFFER_LENGTH / (2 * PLANALTA_DEC_FACT_F1))
 #define PLANALTA_FS_50KHZ_FO2_OUTPUT_SIZE   (BUFFER_SIZE_FS / PLANALTA_DEC_FACT_F2)
 
-#define PLANALTA_FS_25KHZ_FO1_OUTPUT_SIZE   (ADC_BUFFER_LENGTH / (2 * PLANALTA_DEC_FACT_F1 * PLANALTA_DEC_FACT_F8))
+#define PLANALTA_FS_20KHZ_FO1_OUTPUT_SIZE   (ADC_BUFFER_LENGTH / (2 * PLANALTA_DEC_FACT_F1 * PLANALTA_DEC_FACT_F8))
 #define PLANALTA_FS_25KHZ_FO2_OUTPUT_SIZE   (BUFFER_SIZE_FS / PLANALTA_DEC_FACT_F2)
 
 #define PLANALTA_FS_10KHZ_FO1_OUTPUT_SIZE   (ADC_BUFFER_LENGTH / (2 * PLANALTA_DEC_FACT_F1 * PLANALTA_DEC_FACT_F9))
@@ -63,7 +63,7 @@ volatile uint8_t start_filter_fs4 = 0;
 #define PLANALTA_FS_5KHZ_FO2_OUTPUT_SIZE    (BUFFER_SIZE_FS / PLANALTA_DEC_FACT_F3)
 
 #define PLANALTA_FS_2_5KHZ_FO0_OUTPUT_SIZE  (ADC_BUFFER_LENGTH /  PLANALTA_DEC_FACT_F8)
-#define PLANALTA_FS_2_5KHZ_FO1_OUTPUT_SIZE  (PLANALTA_FS_2_5KHZ_FO0_OUTPUT_SIZE / PLANALTA_DEC_FACT_F2)
+#define PLANALTA_FS_2KHZ_FO1_OUTPUT_SIZE  (PLANALTA_FS_2_5KHZ_FO0_OUTPUT_SIZE / PLANALTA_DEC_FACT_F2)
 #define PLANALTA_FS_2_5KHZ_FO2_OUTPUT_SIZE  (BUFFER_SIZE_FS / (PLANALTA_DEC_FACT_F1 / 2))
 
 #define PLANALTA_FS_1KHZ_FO0_OUTPUT_SIZE    (ADC_BUFFER_LENGTH /  PLANALTA_DEC_FACT_F9)
@@ -74,7 +74,7 @@ volatile uint8_t start_filter_fs4 = 0;
 
 #define PLANALTA_FS_250HZ_FO0_OUTPUT_SIZE   (ADC_BUFFER_LENGTH / PLANALTA_DEC_FACT_F8)
 #define PLANALTA_FS_250HZ_FO1_OUTPUT_SIZE   (PLANALTA_FS_250HZ_FO0_OUTPUT_SIZE / PLANALTA_DEC_FACT_F2)
-#define PLANALTA_FS_250HZ_FO2_OUTPUT_SIZE   (PLANALTA_FS_250HZ_FO1_OUTPUT_SIZE / PLANALTA_DEC_FACT_F3)
+#define PLANALTA_FS_200HZ_FO2_OUTPUT_SIZE   (PLANALTA_FS_250HZ_FO1_OUTPUT_SIZE / PLANALTA_DEC_FACT_F3)
 
 #define PLANALTA_FS_100HZ_FO0_OUTPUT_SIZE   (ADC_BUFFER_LENGTH / PLANALTA_DEC_FACT_F9)
 #define PLANALTA_FS_100HZ_FO1_OUTPUT_SIZE   (PLANALTA_FS_100HZ_FO0_OUTPUT_SIZE / PLANALTA_DEC_FACT_F2)
@@ -127,324 +127,61 @@ void adc_rx_callback_fs(void){
 
     switch(freq){
         case PLANALTA_FS_FREQ_50KHZ:
-            // FO0
-            fir_compressed(ADC_BUFFER_LENGTH,
-                sample_buffer,
-                conversion_buffer,
-                &filters_0[0],
-                PLANALTA_DEC_FACT_F0);
-
-            // MIX
-            lia_mixer_no_dc(ADC_BUFFER_LENGTH,
-                conversion_buffer,
-                sample_buffer,
-                &sample_buffer[ADC_BUFFER_LENGTH/2]);
-
-            // FO1
-            if(buffer_selector_0 == 0){
-                fir_compressed(PLANALTA_FS_50KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_a_i_ptr,
-                    sample_buffer,
-                    &filters_1_i[0],
-                    PLANALTA_DEC_FACT_F1);
-                fir_compressed(PLANALTA_FS_50KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_a_q_ptr,
-                    &sample_buffer[ADC_BUFFER_LENGTH/2],
-                    &filters_1_q[0],
-                    PLANALTA_DEC_FACT_F1);
-            } else {
-                fir_compressed(PLANALTA_FS_50KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_b_i_ptr,
-                    sample_buffer,
-                    &filters_1_i[0],
-                    PLANALTA_DEC_FACT_F1);
-                fir_compressed(PLANALTA_FS_50KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_b_q_ptr,
-                    &sample_buffer[ADC_BUFFER_LENGTH/2],
-                    &filters_1_q[0],
-                    PLANALTA_DEC_FACT_F1);
-            }
+            freq_sweep_50khz_filter1();
             
             copy_counter += PLANALTA_FS_50KHZ_FO1_OUTPUT_SIZE;
             break;
             
-        case PLANALTA_FS_FREQ_25KHZ:
-            // FO0
-            fir_compressed(ADC_BUFFER_LENGTH / PLANALTA_DEC_FACT_F8,
-                sample_buffer,
-                conversion_buffer,
-                &filters_8_i[0],
-                PLANALTA_DEC_FACT_F8);
-
-            // MIX
-            lia_mixer_no_dc(ADC_BUFFER_LENGTH / PLANALTA_DEC_FACT_F8,
-                conversion_buffer,
-                sample_buffer,
-                &sample_buffer[ADC_BUFFER_LENGTH/2]);
+        case PLANALTA_FS_FREQ_20KHZ:
+            freq_sweep_20khz_filter1();
             
-            // FO1
-            if(buffer_selector_0 == 0){
-                fir_compressed(PLANALTA_FS_25KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_a_i_ptr,
-                    sample_buffer,
-                    &filters_1_i[0],
-                    PLANALTA_DEC_FACT_F1);
-                fir_compressed(PLANALTA_FS_25KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_a_q_ptr,
-                    &sample_buffer[ADC_BUFFER_LENGTH/2],
-                    &filters_1_q[0],
-                    PLANALTA_DEC_FACT_F1);
-            } else {
-                fir_compressed(PLANALTA_FS_25KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_b_i_ptr,
-                    sample_buffer,
-                    &filters_1_i[0],
-                    PLANALTA_DEC_FACT_F1);
-                fir_compressed(PLANALTA_FS_25KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_b_q_ptr,
-                    &sample_buffer[ADC_BUFFER_LENGTH/2],
-                    &filters_1_q[0],
-                    PLANALTA_DEC_FACT_F1);
-            }
-            
-            copy_counter += PLANALTA_FS_25KHZ_FO1_OUTPUT_SIZE;
+            copy_counter += PLANALTA_FS_20KHZ_FO1_OUTPUT_SIZE;
             break;
             
         case PLANALTA_FS_FREQ_10KHZ:
-            // FO0
-            fir_compressed(ADC_BUFFER_LENGTH / PLANALTA_DEC_FACT_F9,
-                sample_buffer,
-                conversion_buffer,
-                &filter_9,
-                PLANALTA_DEC_FACT_F9);
-
-            // MIX
-            lia_mixer_no_dc(ADC_BUFFER_LENGTH / PLANALTA_DEC_FACT_F9,
-                conversion_buffer,
-                sample_buffer,
-                &sample_buffer[ADC_BUFFER_LENGTH/2]);
-            
-            // FO1
-            if(buffer_selector_0 == 0){
-                fir_compressed(PLANALTA_FS_10KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_a_i_ptr,
-                    sample_buffer,
-                    &filters_1_i[0],
-                    PLANALTA_DEC_FACT_F1);
-                fir_compressed(PLANALTA_FS_10KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_a_q_ptr,
-                    &sample_buffer[ADC_BUFFER_LENGTH/2],
-                    &filters_1_q[0],
-                    PLANALTA_DEC_FACT_F1);
-            } else {
-                fir_compressed(PLANALTA_FS_10KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_b_i_ptr,
-                    sample_buffer,
-                    &filters_1_i[0],
-                    PLANALTA_DEC_FACT_F1);
-                fir_compressed(PLANALTA_FS_10KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_b_q_ptr,
-                    &sample_buffer[ADC_BUFFER_LENGTH/2],
-                    &filters_1_q[0],
-                    PLANALTA_DEC_FACT_F1);
-            }
+            freq_sweep_10khz_filter1();
             
             copy_counter += PLANALTA_FS_10KHZ_FO1_OUTPUT_SIZE;
             break;
             
         case PLANALTA_FS_FREQ_5KHZ:
-            // FO0
-            fir_compressed(ADC_BUFFER_LENGTH / PLANALTA_DEC_FACT_F2,
-                sample_buffer,
-                conversion_buffer,
-                &filters_2_i[0],
-                PLANALTA_DEC_FACT_F2);
-
-            // MIX
-            lia_mixer_no_dc(ADC_BUFFER_LENGTH / PLANALTA_DEC_FACT_F2,
-                conversion_buffer,
-                sample_buffer,
-                &sample_buffer[ADC_BUFFER_LENGTH/2]);
-            
-            // FO1
-            if(buffer_selector_0 == 0){
-                fir_compressed(PLANALTA_FS_5KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_a_i_ptr,
-                    sample_buffer,
-                    &filters_1_i[0],
-                    PLANALTA_DEC_FACT_F1);
-                fir_compressed(PLANALTA_FS_5KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_a_q_ptr,
-                    &sample_buffer[ADC_BUFFER_LENGTH/2],
-                    &filters_1_q[0],
-                    PLANALTA_DEC_FACT_F1);
-            } else {
-                fir_compressed(PLANALTA_FS_5KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_b_i_ptr,
-                    sample_buffer,
-                    &filters_1_i[0],
-                    PLANALTA_DEC_FACT_F1);
-                fir_compressed(PLANALTA_FS_5KHZ_FO1_OUTPUT_SIZE,
-                    buffer_0_b_q_ptr,
-                    &sample_buffer[ADC_BUFFER_LENGTH/2],
-                    &filters_1_q[0],
-                    PLANALTA_DEC_FACT_F1);
-            }
+            freq_sweep_5khz_filter1();
             
             copy_counter += PLANALTA_FS_5KHZ_FO1_OUTPUT_SIZE;
             break;
             
-        case PLANALTA_FS_FREQ_2_5KHZ:
-            // FO0
-            fir_compressed(PLANALTA_FS_2_5KHZ_FO0_OUTPUT_SIZE,
-                sample_buffer,
-                conversion_buffer,
-                &filters_8_i[0],
-                PLANALTA_DEC_FACT_F8);
+        case PLANALTA_FS_FREQ_2KHZ:
+            freq_sweep_2khz_filter1();
             
-            // FO1
-            fir_compressed(PLANALTA_FS_2_5KHZ_FO1_OUTPUT_SIZE,
-                conversion_buffer,
-                sample_buffer,
-                &filters_2_i[0],
-                PLANALTA_DEC_FACT_F2);
-
-            // MIX
-            if(buffer_selector_0 == 0){
-                lia_mixer_no_dc(PLANALTA_FS_2_5KHZ_FO1_OUTPUT_SIZE,
-                sample_buffer,
-                buffer_0_a_i_ptr,
-                buffer_0_a_q_ptr);
-            } else {
-                lia_mixer_no_dc(PLANALTA_FS_2_5KHZ_FO1_OUTPUT_SIZE,
-                sample_buffer,
-                buffer_0_b_i_ptr,
-                buffer_0_b_q_ptr);
-            }
-            
-            copy_counter += PLANALTA_FS_2_5KHZ_FO1_OUTPUT_SIZE;
+            copy_counter += PLANALTA_FS_2KHZ_FO1_OUTPUT_SIZE;
             break;
             
         case PLANALTA_FS_FREQ_1KHZ:
-            // FO0
-            fir_compressed(PLANALTA_FS_1KHZ_FO0_OUTPUT_SIZE,
-                sample_buffer,
-                conversion_buffer,
-                &filter_9,
-                PLANALTA_DEC_FACT_F9);
-            
-            // FO1
-            fir_compressed(PLANALTA_FS_1KHZ_FO1_OUTPUT_SIZE,
-                conversion_buffer,
-                sample_buffer,
-                &filters_2_i[0],
-                PLANALTA_DEC_FACT_F2);
-
-            // MIX
-            if(buffer_selector_0 == 0){
-                lia_mixer_no_dc(PLANALTA_FS_1KHZ_FO1_OUTPUT_SIZE,
-                sample_buffer,
-                buffer_0_a_i_ptr,
-                buffer_0_a_q_ptr);
-            } else {
-                lia_mixer_no_dc(PLANALTA_FS_1KHZ_FO1_OUTPUT_SIZE,
-                sample_buffer,
-                buffer_0_b_i_ptr,
-                buffer_0_b_q_ptr);
-            }
+            freq_sweep_1khz_filter1();
             
             copy_counter += PLANALTA_FS_1KHZ_FO1_OUTPUT_SIZE;
             break;
             
         case PLANALTA_FS_FREQ_500HZ:
-            // FO0
-            fir_compressed(PLANALTA_FS_500HZ_FO0_OUTPUT_SIZE,
-                sample_buffer,
-                conversion_buffer,
-                &filters_2_i[0],
-                PLANALTA_DEC_FACT_F2);
-            
-            // FO1
-            fir_compressed(PLANALTA_FS_500HZ_FO1_OUTPUT_SIZE,
-                conversion_buffer,
-                sample_buffer,
-                &filters_3_i[0],
-                PLANALTA_DEC_FACT_F3);
-
-            // MIX
-            if(buffer_selector_0 == 0){
-                lia_mixer_no_dc(PLANALTA_FS_500HZ_FO1_OUTPUT_SIZE,
-                sample_buffer,
-                buffer_0_a_i_ptr,
-                buffer_0_a_q_ptr);
-            } else {
-                lia_mixer_no_dc(PLANALTA_FS_500HZ_FO1_OUTPUT_SIZE,
-                sample_buffer,
-                buffer_0_b_i_ptr,
-                buffer_0_b_q_ptr);
-            }
+            freq_sweep_500hz_filter1();
             
             copy_counter += PLANALTA_FS_500HZ_FO1_OUTPUT_SIZE;
             break;
             
-        case PLANALTA_FS_FREQ_250HZ:
-            // FO0
-            fir_compressed(PLANALTA_FS_250HZ_FO0_OUTPUT_SIZE,
-                sample_buffer,
-                conversion_buffer,
-                &filters_8_i[0],
-                PLANALTA_DEC_FACT_F8);
+        case PLANALTA_FS_FREQ_200HZ:
+            freq_sweep_200hz_filter1();
             
-            // FO1
-            fir_compressed(PLANALTA_FS_250HZ_FO1_OUTPUT_SIZE,
-                conversion_buffer,
-                sample_buffer,
-                &filters_2_i[0],
-                PLANALTA_DEC_FACT_F2);
-
-            // FO2
-            if(buffer_selector_0 == 0){
-                fir_compressed(PLANALTA_FS_250HZ_FO2_OUTPUT_SIZE,
-                    buffer_0_a_i_ptr,
-                    sample_buffer,
-                    &filters_3_i[0],
-                    PLANALTA_DEC_FACT_F3);
-            } else {
-                fir_compressed(PLANALTA_FS_250HZ_FO2_OUTPUT_SIZE,
-                    buffer_0_b_i_ptr,
-                    sample_buffer,
-                    &filters_3_i[0],
-                    PLANALTA_DEC_FACT_F3);
-            }
-            
-            copy_counter += PLANALTA_FS_250HZ_FO2_OUTPUT_SIZE;
+            copy_counter += PLANALTA_FS_200HZ_FO2_OUTPUT_SIZE;
             break;
             
         case PLANALTA_FS_FREQ_100HZ:
-            // FO0
-            fir_compressed(PLANALTA_FS_100HZ_FO0_OUTPUT_SIZE,
-                sample_buffer,
-                conversion_buffer,
-                &filter_9,
-                PLANALTA_DEC_FACT_F9);
-            
-            // FO1
-            if(buffer_selector_0 == 0){
-                fir_compressed(PLANALTA_FS_100HZ_FO1_OUTPUT_SIZE,
-                    buffer_0_a_i_ptr,
-                    sample_buffer,
-                    &filters_2_i[0],
-                    PLANALTA_DEC_FACT_F2);
-            } else {
-                fir_compressed(PLANALTA_FS_100HZ_FO1_OUTPUT_SIZE,
-                    buffer_0_b_i_ptr,
-                    sample_buffer,
-                    &filters_2_i[0],
-                    PLANALTA_DEC_FACT_F2);
-            }
+            freq_sweep_100hz_filter1();
             
             copy_counter += PLANALTA_FS_100HZ_FO1_OUTPUT_SIZE;
             break;
+            
+        case PLANALTA_FS_FREQ_DC:
+            freq_sweep_dc_filter1();
             
         default:
             report_error("planalta: unknown freq config");
@@ -735,14 +472,14 @@ void planalta_filter_fs4(void){
 
 void planalta_filter_fs(void) {
     while(gconfig.adc_config.status == ADC_STATUS_ON){
-        i2c_detect_stop();
+        i2c1_detect_stop();
         
         // ping-pong buffered data of in & out
         if(start_filter2){
             run_filter2_5khz();
         }
         
-        i2c_detect_stop();
+        i2c1_detect_stop();
         
         // only input is ping-pong buffered -> filter 4 must be executed before
         // filter 3 is executed again to avoid overwriting data
@@ -750,26 +487,26 @@ void planalta_filter_fs(void) {
             run_filter3_5khz();
         }
         
-        i2c_detect_stop();
+        i2c1_detect_stop();
         
         // make sure that no data is lost of inner filtering (happens often)
         if(start_filter2){
             run_filter2_5khz();
         }
         
-        i2c_detect_stop();
+        i2c1_detect_stop();
         
         if(start_filter4){
             run_filter4_5khz();
         }
         
-        i2c_detect_stop();
+        i2c1_detect_stop();
         
         if(start_filter2){
             run_filter2_5khz();
         }
         
-        i2c_detect_stop();
+        i2c1_detect_stop();
         
         // has to be executed before filter 4 to avoid overwriting data
         if(start_filter5){

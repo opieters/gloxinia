@@ -7,14 +7,16 @@ extern "C" {
 
     typedef enum {
         PLANALTA_FS_FREQ_50KHZ,
-        PLANALTA_FS_FREQ_25KHZ,
+        PLANALTA_FS_FREQ_20KHZ,
         PLANALTA_FS_FREQ_10KHZ,
         PLANALTA_FS_FREQ_5KHZ,
-        PLANALTA_FS_FREQ_2_5KHZ,
+        PLANALTA_FS_FREQ_2KHZ,
         PLANALTA_FS_FREQ_1KHZ,
         PLANALTA_FS_FREQ_500HZ,
-        PLANALTA_FS_FREQ_250HZ,
-        PLANALTA_FS_FREQ_100HZ,
+        PLANALTA_FS_FREQ_200HZ,
+        PLANALTA_FS_FREQ_100HZ
+        PLANALTA_FS_FREQ_20HZ,
+        PLANALTA_FS_FREQ_10HZ,
     } planalta_fs_freq_t;
     
     typedef struct {
